@@ -9,7 +9,7 @@ from tqdm import tqdm
 from pathlib import Path
 
 NUM_CLASSES = 100
-MID_LAYER_SIZE = 64
+MID_LAYER_SIZE = 32
 N_MAIN_LAYERS = 4
 EPOCHS = 1000
 BATCH_SIZE = 256
@@ -36,6 +36,7 @@ loss_function = nn.CrossEntropyLoss()
 
 model = Spectracles(
     num_classes=NUM_CLASSES,
+    num_layers=N_MAIN_LAYERS,
     mid_layer_size=MID_LAYER_SIZE,
 )
 model = model.to(DEVICE)

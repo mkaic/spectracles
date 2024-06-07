@@ -2,7 +2,17 @@ import torch.nn as nn
 import torch
 from torch.fft import fft2
 from torch import Tensor
+    
+class Normalization(nn.Module):
+    def __init__(self, dims):
+        super().__init__()
+        self.dims = dims
 
+    def forward(
+        self,
+        x: Tensor,
+    ) -> Tensor:
+        return (x - x.mean(dim=self.dims, keepdim=True)) / (x.std(dim=self.dims, keepdim=True) + 1e-6)
 
 class FourierTransform(nn.Module):
     def __init__(self):
@@ -54,6 +64,7 @@ class FourierBlock(nn.Module):
         self.residual = residual
         self.layers = nn.Sequential(
             FourierTransform(),
+            Normalization(dims=(1,2,3)),
             SimplePositionEmbedding2D(),
             nn.Conv2d(
                 kernel_size=1,
