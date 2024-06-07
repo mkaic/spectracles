@@ -18,7 +18,7 @@ args = dict(
     position_embedding_type="simple",
     batch_size=256,
     lr=1e-3,
-    data_augmentation=True,
+    data_augmentation=False,
 )
 
 
