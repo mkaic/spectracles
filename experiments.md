@@ -1,3 +1,4 @@
+### Session 1 Experiments
 1. 16.3% acc. 12k params. 32 x 4, 40 epochs. 256 batch size.
 2. 28.5% acc. 12k params. 32 x 4, 120 epochs. 256 batch size.
 3. 31.3% acc. 40k params. 64 x 4, 150 epochs. 256 batch size.
@@ -13,3 +14,7 @@
 ### Session 1 Findings
 Standardizing every image in every block helps. Residual connections don't seem to hurt or help. Deeper vs wider layers is unclear. Standardizing works better than Normalizing.
 
+### Session 2 Experiments
+12. 31% acc. 17k params. 120 epochs. Same as (11) but with an extra "linear layer" in every block.
+
+Further experiments are happening at [this WandB workspace](https://wandb.ai/mkaichristensen/spectracles).

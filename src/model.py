@@ -2,8 +2,9 @@ import torch.nn as nn
 import torch
 from torch.fft import fft2
 from torch import Tensor
-    
-class Normalization(nn.Module):
+
+
+class Standardization(nn.Module):
     def __init__(self, dims):
         super().__init__()
         self.dims = dims
@@ -12,7 +13,10 @@ class Normalization(nn.Module):
         self,
         x: Tensor,
     ) -> Tensor:
-        return (x - x.mean(dim=self.dims, keepdim=True)) / (x.std(dim=self.dims, keepdim=True) + 1e-6)
+        return (x - x.mean(dim=self.dims, keepdim=True)) / (
+            x.std(dim=self.dims, keepdim=True) + 1e-6
+        )
+
 
 class FourierTransform(nn.Module):
     def __init__(self):
@@ -58,20 +62,44 @@ class SimplePositionEmbedding2D(nn.Module):
 
 
 class FourierBlock(nn.Module):
-    def __init__(self, in_channels, out_channels: int, residual: bool = False):
+    def __init__(
+        self,
+        in_channels,
+        out_channels: int,
+        residual,
+        n_linear,
+        standardization_dims,
+        position_embedding_type,
+    ):
 
         super().__init__()
         self.residual = residual
-        self.layers = nn.Sequential(
+        self.layers = [
             FourierTransform(),
-            Normalization(dims=(1,2,3)),
+            Standardization(dims=standardization_dims),
             SimplePositionEmbedding2D(),
             nn.Conv2d(
                 kernel_size=1,
                 in_channels=in_channels * 2 + 2,
                 out_channels=out_channels,
             ),
-        )
+        ]
+
+        for _ in range(n_linear):
+            self.layers.extend(
+                [
+                    nn.ReLU(),
+                    SimplePositionEmbedding2D(),
+                    nn.Conv2d(
+                        kernel_size=1,
+                        in_channels=out_channels + 2,
+                        out_channels=out_channels,
+                    ),
+                ]
+            )
+
+        self.layers = nn.Sequential(*self.layers)
+
         self.activation = nn.ReLU()
 
     def forward(self, x: Tensor) -> Tensor:
@@ -84,20 +112,47 @@ class FourierBlock(nn.Module):
 class Spectracles(nn.Module):
     def __init__(
         self,
-        num_classes: int,
-        input_channels: int = 3,
-        mid_layer_size: int = 256,
-        num_layers: int = 4,
+        input_channels,
+        num_classes,
+        mid_layer_size,
+        num_layers,
+        n_linear_within_fourier,
+        standardization_dims,
+        residual,
+        position_embedding_type,
+        **kwargs
     ):
         super().__init__()
         self.input_channels = input_channels
         self.num_classes = num_classes
         self.mid_layer_size = mid_layer_size
         self.num_layers = num_layers
+        self.n_linear_within_fourier = n_linear_within_fourier
+        self.standardization_dims = standardization_dims
+        self.residual = residual
+        self.position_embedding_type = position_embedding_type
 
-        layers = [FourierBlock(3, mid_layer_size)]
+        layers = [
+            FourierBlock(
+                3,
+                mid_layer_size,
+                residual=False,
+                n_linear=n_linear_within_fourier,
+                standardization_dims=standardization_dims,
+                position_embedding_type=position_embedding_type,
+            )
+        ]
         for i in range(num_layers):
-            layers.append(FourierBlock(mid_layer_size, mid_layer_size, residual=True))
+            layers.append(
+                FourierBlock(
+                    mid_layer_size,
+                    mid_layer_size,
+                    residual=residual,
+                    n_linear=n_linear_within_fourier,
+                    standardization_dims=standardization_dims,
+                    position_embedding_type=position_embedding_type,
+                )
+            )
 
         layers.append(nn.AdaptiveAvgPool2d((1, 1)))
         layers.append(nn.Flatten())
