@@ -12,25 +12,20 @@ import wandb
 args = dict(
     mid_layer_size=32,
     num_layers=4,
-    n_linear_within_fourier=1,
+    n_linear_within_fourier=0,
     standardization_dims=(1, 2, 3),
     residual=True,
     position_embedding_type="simple",
-    batch_size=256,
-    lr=1e-3,
-    data_augmentation=False,
+    repetitions=1,
 )
 
 
-wandb.init(project="spectracles", config=args)
-
-
-EPOCHS = 1000
+EPOCHS = 50
 SAVE = False
 
 print("\n", args)
 
-DEVICE = "cuda:1" if torch.cuda.is_available() else "cpu"
+DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 DTYPE = torch.float32
 
 if not Path("spectracles/weights").exists():
@@ -45,6 +40,15 @@ model = model.to(DTYPE)
 num_params = sum(p.numel() for p in model.parameters())
 print(f"{num_params:,} trainable parameters")
 
+config = dict(
+    **args,
+    num_params = num_params,
+    batch_size=256,
+    lr=1e-3,
+    data_augmentation=False,
+)
+wandb.init(project="spectracles", config=config)
+
 train_transforms = (
     tvt.Compose(
         [
@@ -57,7 +61,6 @@ train_transforms = (
             ),
             tvt.RandomHorizontalFlip(),
             tvt.RandomVerticalFlip(),
-            tvt.RandomGrayscale(),
             tvt.ColorJitter(
                 brightness=0.1,
                 contrast=0.1,
@@ -66,7 +69,7 @@ train_transforms = (
             ),
         ]
     )
-    if args["data_augmentation"]
+    if config["data_augmentation"]
     else tvt.ToTensor()
 )
 
@@ -79,14 +82,14 @@ test = CIFAR100(
 )
 
 train_loader = DataLoader(
-    train, batch_size=args["batch_size"], shuffle=True, drop_last=False, num_workers=8
+    train, batch_size=config["batch_size"], shuffle=True, drop_last=False, num_workers=4
 )
 test_loader = DataLoader(
-    test, batch_size=args["batch_size"], shuffle=False, drop_last=False, num_workers=8
+    test, batch_size=config["batch_size"], shuffle=False, drop_last=False, num_workers=4
 )
 
 # Train the model
-optimizer = Adam(model.parameters(), lr=args["lr"])
+optimizer = Adam(model.parameters(), lr=config["lr"])
 
 train_accuracy = 0
 test_accuracy = 0

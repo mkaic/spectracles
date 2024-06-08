@@ -75,8 +75,8 @@ class FourierBlock(nn.Module):
         super().__init__()
         self.residual = residual
         self.layers = [
-            FourierTransform(),
             Standardization(dims=standardization_dims),
+            FourierTransform(),
             SimplePositionEmbedding2D(),
             nn.Conv2d(
                 kernel_size=1,
@@ -120,6 +120,7 @@ class Spectracles(nn.Module):
         standardization_dims,
         residual,
         position_embedding_type,
+        repetitions=1,
         **kwargs
     ):
         super().__init__()
@@ -131,8 +132,9 @@ class Spectracles(nn.Module):
         self.standardization_dims = standardization_dims
         self.residual = residual
         self.position_embedding_type = position_embedding_type
+        self.repetitions = repetitions
 
-        layers = [
+        self.in_layers = nn.Sequential(
             FourierBlock(
                 3,
                 mid_layer_size,
@@ -141,7 +143,8 @@ class Spectracles(nn.Module):
                 standardization_dims=standardization_dims,
                 position_embedding_type=position_embedding_type,
             )
-        ]
+        )
+        layers = []
         for i in range(num_layers):
             layers.append(
                 FourierBlock(
@@ -154,15 +157,23 @@ class Spectracles(nn.Module):
                 )
             )
 
-        layers.append(nn.AdaptiveAvgPool2d((1, 1)))
-        layers.append(nn.Flatten())
-        layers.append(nn.Linear(mid_layer_size, num_classes))
+        self.main_layers = nn.Sequential(*layers)
 
-        self.sequential = nn.Sequential(*layers)
+        self.out_layers = nn.Sequential(nn.AdaptiveAvgPool2d((1, 1)), nn.Flatten(), nn.Linear(mid_layer_size, num_classes))
+        
+
+        
 
     def forward(
         self,
         x: Tensor,
     ) -> Tensor:
 
-        return self.sequential(x)
+        x = self.in_layers(x)
+
+        for i in range(self.repetitions):
+            x = self.main_layers(x)
+
+        x = self.out_layers(x)
+        
+        return x
