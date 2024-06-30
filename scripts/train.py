@@ -12,7 +12,7 @@ import wandb
 args = dict(
     mid_layer_size=32,
     num_layers=4,
-    n_linear_within_fourier=0,
+    n_linear_within_fourier=2,
     standardization_dims=(1, 2, 3),
     residual=True,
     position_embedding_type="simple",
@@ -37,13 +37,15 @@ model = Spectracles(num_classes=100, input_channels=3, **args)
 model = model.to(DEVICE)
 model = model.to(DTYPE)
 
+print(model)
+
 num_params = sum(p.numel() for p in model.parameters())
 print(f"{num_params:,} trainable parameters")
 
 config = dict(
     **args,
-    num_params = num_params,
-    batch_size=256,
+    num_params=num_params,
+    batch_size=128,
     lr=1e-3,
     data_augmentation=False,
 )
@@ -89,7 +91,7 @@ test_loader = DataLoader(
 )
 
 # Train the model
-optimizer = Adam(model.parameters(), lr=config["lr"])
+optimizer = Adam(model.parameters(), lr=config["lr"], betas=(0.9, 0.99))
 
 train_accuracy = 0
 test_accuracy = 0

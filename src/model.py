@@ -29,8 +29,10 @@ class FourierTransform(nn.Module):
         b, c, h, w = x.shape
         x = fft2(x)
         x = torch.view_as_real(x)
+        x = x.movedim(-1, 2).contiguous()
         x = x.reshape(b, c * 2, h, w)
         return x
+    
 
 
 class SimplePositionEmbedding2D(nn.Module):
@@ -73,6 +75,8 @@ class FourierBlock(nn.Module):
     ):
 
         super().__init__()
+
+        extra_pos_embed_chan = 2 if position_embedding_type == "simple" else 0
         self.residual = residual
         self.layers = [
             Standardization(dims=standardization_dims),
@@ -80,8 +84,8 @@ class FourierBlock(nn.Module):
             SimplePositionEmbedding2D(),
             nn.Conv2d(
                 kernel_size=1,
-                in_channels=in_channels * 2 + 2,
-                out_channels=out_channels,
+                in_channels=in_channels * 2 + extra_pos_embed_chan,
+                out_channels=in_channels * 2,
             ),
         ]
 
@@ -89,14 +93,28 @@ class FourierBlock(nn.Module):
             self.layers.extend(
                 [
                     nn.ReLU(),
+                    Standardization(dims=standardization_dims),
                     SimplePositionEmbedding2D(),
                     nn.Conv2d(
                         kernel_size=1,
-                        in_channels=out_channels + 2,
-                        out_channels=out_channels,
+                        in_channels=in_channels * 2 + extra_pos_embed_chan,
+                        out_channels=in_channels * 2,
                     ),
                 ]
             )
+
+        self.layers.extend(
+            [
+                nn.ReLU(),
+                Standardization(dims=standardization_dims),
+                SimplePositionEmbedding2D(),
+                nn.Conv2d(
+                    kernel_size=1,
+                    in_channels=in_channels * 2 + extra_pos_embed_chan,
+                    out_channels=out_channels,
+                ),
+            ]
+        )
 
         self.layers = nn.Sequential(*self.layers)
 
@@ -159,10 +177,11 @@ class Spectracles(nn.Module):
 
         self.main_layers = nn.Sequential(*layers)
 
-        self.out_layers = nn.Sequential(nn.AdaptiveAvgPool2d((1, 1)), nn.Flatten(), nn.Linear(mid_layer_size, num_classes))
-        
-
-        
+        self.out_layers = nn.Sequential(
+            nn.AdaptiveAvgPool2d((1, 1)),
+            nn.Flatten(),
+            nn.Linear(mid_layer_size, num_classes),
+        )
 
     def forward(
         self,
@@ -175,5 +194,5 @@ class Spectracles(nn.Module):
             x = self.main_layers(x)
 
         x = self.out_layers(x)
-        
+
         return x
