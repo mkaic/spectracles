@@ -13,10 +13,10 @@ args = dict(
     mid_layer_size=32,
     num_layers=4,
     n_linear_within_fourier=2,
-    standardization_dims=(1, 2, 3),
+    normalization_dims=(1, 2, 3),
     residual=True,
-    position_embedding_type="simple",
-    repetitions=1,
+    position_embedding_type="sinusoidal",
+    position_embedding_size=8,
 )
 
 
@@ -24,6 +24,13 @@ EPOCHS = 50
 SAVE = False
 
 print("\n", args)
+
+config = dict(
+    **args,
+    batch_size=128,
+    lr=1e-3,
+    data_augmentation=False,
+)
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 DTYPE = torch.float32
@@ -42,13 +49,10 @@ print(model)
 num_params = sum(p.numel() for p in model.parameters())
 print(f"{num_params:,} trainable parameters")
 
-config = dict(
-    **args,
-    num_params=num_params,
-    batch_size=128,
-    lr=1e-3,
-    data_augmentation=False,
-)
+model = torch.compile(model)
+
+config["num_params"] = num_params
+
 wandb.init(project="spectracles", config=config)
 
 train_transforms = (
@@ -84,10 +88,10 @@ test = CIFAR100(
 )
 
 train_loader = DataLoader(
-    train, batch_size=config["batch_size"], shuffle=True, drop_last=False, num_workers=4
+    train, batch_size=config["batch_size"], shuffle=True, drop_last=True, num_workers=4
 )
 test_loader = DataLoader(
-    test, batch_size=config["batch_size"], shuffle=False, drop_last=False, num_workers=4
+    test, batch_size=config["batch_size"], shuffle=False, drop_last=True, num_workers=4
 )
 
 # Train the model
