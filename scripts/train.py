@@ -3,27 +3,30 @@ from torchvision.datasets import CIFAR100
 import torchvision.transforms as tvt
 from ..src.model import Spectracles
 from torch.utils.data import DataLoader
-from torch.optim import Adam
+from torch.optim import AdamW
 import torch.nn as nn
 from tqdm import tqdm
 from pathlib import Path
 import wandb
+from argparse import ArgumentParser
+import warnings 
+
+warnings.filterwarnings("ignore", "Torchinductor does not support code generation for complex operators")
+
+parser = ArgumentParser()
+parser.add_argument("-n", "--name", type=str, default=None)
+args = parser.parse_args()
+name = args.name
 
 args = dict(
-    mid_layer_size=32,
+    mid_layer_size=64,
     num_layers=4,
-    n_linear_within_fourier=2,
+    n_linear_within_fourier=4,
     normalization_dims=(1, 2, 3),
     residual=True,
     position_embedding_type="sinusoidal",
-    position_embedding_size=8,
+    position_embedding_size=4,
 )
-
-
-EPOCHS = 50
-SAVE = False
-
-print("\n", args)
 
 config = dict(
     **args,
@@ -31,6 +34,11 @@ config = dict(
     lr=1e-3,
     data_augmentation=False,
 )
+
+EPOCHS = 1000
+SAVE = False
+
+print("\n", args)
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 DTYPE = torch.float32
@@ -53,7 +61,7 @@ model = torch.compile(model)
 
 config["num_params"] = num_params
 
-wandb.init(project="spectracles", config=config)
+wandb.init(project="spectracles", config=config, name=name)
 
 train_transforms = (
     tvt.Compose(
@@ -65,8 +73,6 @@ train_transforms = (
                 scale=(0.9, 1.1),
                 shear=15,
             ),
-            tvt.RandomHorizontalFlip(),
-            tvt.RandomVerticalFlip(),
             tvt.ColorJitter(
                 brightness=0.1,
                 contrast=0.1,
@@ -95,7 +101,7 @@ test_loader = DataLoader(
 )
 
 # Train the model
-optimizer = Adam(model.parameters(), lr=config["lr"], betas=(0.9, 0.99))
+optimizer = AdamW(model.parameters(), lr=config["lr"])
 
 train_accuracy = 0
 test_accuracy = 0
