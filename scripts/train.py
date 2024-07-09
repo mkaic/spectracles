@@ -3,15 +3,17 @@ from torchvision.datasets import CIFAR100
 import torchvision.transforms as tvt
 from ..src.model import Spectracles
 from torch.utils.data import DataLoader
-from torch.optim import AdamW
+from torch.optim import Adam
 import torch.nn as nn
 from tqdm import tqdm
 from pathlib import Path
 import wandb
 from argparse import ArgumentParser
-import warnings 
+import warnings
 
-warnings.filterwarnings("ignore", "Torchinductor does not support code generation for complex operators")
+warnings.filterwarnings(
+    "ignore", "Torchinductor does not support code generation for complex operators"
+)
 
 parser = ArgumentParser()
 parser.add_argument("-n", "--name", type=str, default=None)
@@ -19,13 +21,12 @@ args = parser.parse_args()
 name = args.name
 
 args = dict(
-    mid_layer_size=64,
+    mid_layer_size=32,
     num_layers=4,
-    n_linear_within_fourier=4,
+    n_linear_within_fourier=2,
     normalization_dims=(1, 2, 3),
     residual=True,
-    position_embedding_type="sinusoidal",
-    position_embedding_size=4,
+    pe_freqs=6,
 )
 
 config = dict(
@@ -57,7 +58,7 @@ print(model)
 num_params = sum(p.numel() for p in model.parameters())
 print(f"{num_params:,} trainable parameters")
 
-model = torch.compile(model)
+# model = torch.compile(model)
 
 config["num_params"] = num_params
 
@@ -101,7 +102,7 @@ test_loader = DataLoader(
 )
 
 # Train the model
-optimizer = AdamW(model.parameters(), lr=config["lr"])
+optimizer = Adam(model.parameters(), lr=config["lr"])
 
 train_accuracy = 0
 test_accuracy = 0

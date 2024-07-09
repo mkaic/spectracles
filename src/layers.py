@@ -3,7 +3,84 @@ import torch.nn as nn
 from torch.fft import fft2
 from torch import Tensor
 
-class Normalization(nn.Module):
+
+# Slightly modified from https://github.com/mehdihosseinimoghadam/Complex-Neural-Networks/blob/main/complex_neural_net.py
+class ComplexLinear(nn.Module):
+    def __init__(self, in_channels, out_channels, **kwargs):
+        super().__init__()
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+
+        self.real_linear = nn.Linear(self.in_channels, self.out_channels, **kwargs)
+        self.imag_linear = nn.Linear(self.in_channels, self.out_channels, **kwargs)
+
+    def forward(self, x: Tensor):
+
+        x = torch.view_as_real(x)
+        x_real = x[..., 0]
+        x_imag = x[..., 1]
+
+        real = self.real_linear(x_real) - self.imag_linear(x_imag)
+        imag = self.imag_linear(x_real) + self.real_linear(x_imag)
+
+        out = torch.stack([real, imag], -1)
+        out = torch.view_as_complex(out)
+
+        return out
+
+
+class ComplexConv2d(nn.Module):
+    def __init__(self, in_channels, out_channels, **kwargs):
+        super().__init__()
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+
+        self.real_conv = nn.Conv2d(self.in_channels, self.out_channels, **kwargs)
+        self.imag_conv = nn.Conv2d(self.in_channels, self.out_channels, **kwargs)
+
+    def forward(self, x: Tensor):
+
+        x = torch.view_as_real(x)
+        x_real = x[..., 0]
+        x_imag = x[..., 1]
+
+        # real * real = real, imag * image = -real
+        out_real = self.real_conv(x_real) - self.imag_conv(x_imag)
+        # real * imag = imag, imag * real = imag
+        out_imag = self.imag_conv(x_real) + self.real_conv(x_imag)
+
+        out = torch.stack([out_real, out_imag], -1)
+        out = torch.view_as_complex(out)
+
+        return out
+
+
+class ComplexActivation(nn.Module):
+    def __init__(self, activation):
+        super().__init__()
+        self.activation = activation
+
+    def forward(
+        self,
+        x: Tensor,
+    ) -> Tensor:
+
+        x = torch.view_as_real(x)
+        x_real = x[..., 0]
+        x_imag = x[..., 1]
+
+        return torch.view_as_complex(
+            torch.stack(
+                [
+                    self.activation(x_real),
+                    self.activation(x_imag),
+                ],
+                dim=-1,
+            )
+        )
+
+
+class ComplexNormalization(nn.Module):
     def __init__(self, dims):
         super().__init__()
         self.dims = dims
@@ -12,9 +89,28 @@ class Normalization(nn.Module):
         self,
         x: Tensor,
     ) -> Tensor:
-        return (x - x.mean(dim=self.dims, keepdim=True)) / (
-            x.std(dim=self.dims, keepdim=True) + 1e-6
-        )
+        
+        if torch.is_complex(x):
+
+            x = torch.view_as_real(x)
+            x_real = x[..., 0]
+            x_imag = x[..., 1]
+
+            return torch.view_as_complex(
+                torch.stack(
+                    [
+                        (x_real - x_real.mean(dim=self.dims, keepdim=True))
+                        / (x_real.std(dim=self.dims, keepdim=True) + 1e-6),
+                        (x_imag - x_imag.mean(dim=self.dims, keepdim=True))
+                        / (x_imag.std(dim=self.dims, keepdim=True) + 1e-6),
+                    ],
+                    dim=-1,
+                )
+            )
+        else:
+            return (x - x.mean(dim=self.dims, keepdim=True)) / (
+                x.std(dim=self.dims, keepdim=True) + 1e-6
+            )
 
 
 class FourierTransform(nn.Module):
@@ -25,44 +121,11 @@ class FourierTransform(nn.Module):
         self,
         x: Tensor,
     ) -> Tensor:
-        b, c, h, w = x.shape
         x = fft2(x)
-        x = torch.view_as_real(x)
-        x = x.movedim(-1, 2).contiguous()
-        x = x.reshape(b, c * 2, h, w)
         return x
 
 
-class SimplePositionEmbedding2D(nn.Module):
-    def __init__(self):
-        super().__init__()
-        self.added_channels = 2
-
-    def forward(
-        self,
-        x: Tensor,
-    ) -> Tensor:
-        batch_size, channels, height, width = x.shape
-
-        positions = (
-            torch.stack(
-                torch.meshgrid(
-                    *[
-                        torch.arange(i, dtype=x.dtype, device=x.device) / (i - 1)
-                        for i in (height, width)
-                    ],
-                    indexing="ij"
-                ),
-                dim=-1,
-            )
-            .expand(batch_size, height, width, 2)
-            .permute(0, 3, 1, 2)
-        )
-
-        return torch.cat([x, positions], dim=1)
-
-
-class SinusoidalPositionEmbedding2D(nn.Module):
+class ComplexSinusoidalPositionEmbedding2D(nn.Module):
     def __init__(self, num_freqs):
         super().__init__()
         self.num_freqs = num_freqs
@@ -72,29 +135,32 @@ class SinusoidalPositionEmbedding2D(nn.Module):
         self,
         x: Tensor,
     ) -> Tensor:
-        batch_size, channels, height, width = x.shape
+        b, c, h, w = x.shape
 
         positions = (
             torch.stack(
                 torch.meshgrid(
                     *[
-                        torch.arange(i, dtype=x.dtype, device=x.device) / (i - 1)
-                        for i in (height, width)
+                        torch.arange(i, dtype=torch.float32, device=x.device) / (i - 1)
+                        for i in (h, w)
                     ],
                     indexing="ij"
                 ),
                 dim=-1,
             )
-            .expand(batch_size, height, width, 2)
+            .expand(b, h, w, 2)
             .permute(0, 3, 1, 2)  # B, 2, H, W
         )
 
         freq_bands = []
 
         for freq in range(1, self.num_freqs + 1):
-            for func in [torch.sin, torch.cos]:
-                for dim in range(2):
-                    freq_bands.append(func(positions[:, dim] * freq * 2 * torch.pi))
+            for dim in range(2):
+                sin = torch.sin(positions[:, dim] * freq * 2 * torch.pi)
+                cos = torch.cos(positions[:, dim] * freq * 2 * torch.pi)
+                complex_view = torch.stack([sin, cos], dim=-1)
+                complex_view = torch.view_as_complex(complex_view)
+                freq_bands.append(complex_view)
 
         positions = torch.stack(freq_bands, dim=1)
 
@@ -105,53 +171,50 @@ class FourierBlock(nn.Module):
     def __init__(
         self,
         in_channels,
-        out_channels: int,
+        out_channels,
         residual,
         n_linear,
         normalization_dims,
-        position_embedding,
+        pe_freqs,
     ):
 
         super().__init__()
 
-        self.position_embedding = position_embedding
-        position_embedding_chans = position_embedding.added_channels
-
         self.residual = residual
 
         self.layers = [
-            Normalization(dims=normalization_dims),
+            ComplexNormalization(dims=normalization_dims),
             FourierTransform(),
-            self.position_embedding,
-            nn.Conv2d(
+            ComplexSinusoidalPositionEmbedding2D(num_freqs=pe_freqs),
+            ComplexConv2d(
                 kernel_size=1,
-                in_channels=in_channels * 2 + position_embedding_chans,
-                out_channels=in_channels * 2,
+                in_channels=in_channels + pe_freqs * 2,
+                out_channels=in_channels,
             ),
         ]
 
         for _ in range(n_linear):
             self.layers.extend(
                 [
-                    nn.ReLU(),
-                    Normalization(dims=normalization_dims),
-                    self.position_embedding,
-                    nn.Conv2d(
+                    ComplexActivation(nn.ReLU()),
+                    ComplexNormalization(dims=normalization_dims),
+                    ComplexSinusoidalPositionEmbedding2D(num_freqs=pe_freqs),
+                    ComplexConv2d(
                         kernel_size=1,
-                        in_channels=in_channels * 2 + position_embedding_chans,
-                        out_channels=in_channels * 2,
+                        in_channels=in_channels + pe_freqs * 2,
+                        out_channels=in_channels,
                     ),
                 ]
             )
 
         self.layers.extend(
             [
-                nn.ReLU(),
-                Normalization(dims=normalization_dims),
-                self.position_embedding,
-                nn.Conv2d(
+                ComplexActivation(nn.ReLU()),
+                ComplexNormalization(dims=normalization_dims),
+                ComplexSinusoidalPositionEmbedding2D(num_freqs=pe_freqs),
+                ComplexConv2d(
                     kernel_size=1,
-                    in_channels=in_channels * 2 + position_embedding_chans,
+                    in_channels=in_channels + pe_freqs * 2,
                     out_channels=out_channels,
                 ),
             ]
@@ -159,7 +222,7 @@ class FourierBlock(nn.Module):
 
         self.layers = nn.Sequential(*self.layers)
 
-        self.activation = nn.ReLU()
+        self.activation = ComplexActivation(nn.ReLU())
 
     def forward(self, x: Tensor) -> Tensor:
         if self.residual:
@@ -178,17 +241,17 @@ class SelectPixel(nn.Module):
         x: Tensor,
     ) -> Tensor:
         b, c, h, w = x.shape
-        i = int(self.relative_coords[0] * (h-1))
-        j = int(self.relative_coords[1] * (w-1))
+        i = int(self.relative_coords[0] * (h - 1))
+        j = int(self.relative_coords[1] * (w - 1))
         return x[:, :, i, j]
-    
-class NoPositionEmbedding(nn.Module):
+
+
+class ComplexAmplitude(nn.Module):
     def __init__(self):
         super().__init__()
-        self.added_channels = 0
 
     def forward(
         self,
         x: Tensor,
     ) -> Tensor:
-        return x
+        return torch.abs(x)

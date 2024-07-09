@@ -1,7 +1,7 @@
 import torch.nn as nn
-import torch
 from torch import Tensor
-from .layers import *
+from .layers import FourierBlock, SelectPixel, ComplexLinear, ComplexAmplitude
+
 
 class Spectracles(nn.Module):
     def __init__(
@@ -13,8 +13,7 @@ class Spectracles(nn.Module):
         n_linear_within_fourier,
         normalization_dims,
         residual,
-        position_embedding_type,
-        position_embedding_size,
+        pe_freqs,
         **kwargs
     ):
         super().__init__()
@@ -25,43 +24,36 @@ class Spectracles(nn.Module):
         self.n_linear_within_fourier = n_linear_within_fourier
         self.normalization_dims = normalization_dims
         self.residual = residual
+        self.pe_freqs = pe_freqs
 
-        self.position_embedding = {
-            "simple": SimplePositionEmbedding2D(),
-            "sinusoidal": SinusoidalPositionEmbedding2D(position_embedding_size),
-            "none": NoPositionEmbedding(),
-        }[position_embedding_type]
-
-        self.in_layers = nn.Sequential(
-            FourierBlock(
+        self.in_layers = FourierBlock(
                 3,
                 mid_layer_size,
                 residual=False,
                 n_linear=n_linear_within_fourier,
                 normalization_dims=normalization_dims,
-                position_embedding=self.position_embedding,
+                pe_freqs=pe_freqs,
             )
-        )
-        layers = []
+        mid_layers = []
         for _ in range(num_layers):
-            layers.append(
+            mid_layers.append(
                 FourierBlock(
                     mid_layer_size,
                     mid_layer_size,
                     residual=residual,
                     n_linear=n_linear_within_fourier,
                     normalization_dims=normalization_dims,
-                    position_embedding=self.position_embedding,
+                    pe_freqs=pe_freqs,
                 )
             )
 
-        self.main_layers = nn.Sequential(*layers)
+        self.mid_layers = nn.Sequential(*mid_layers)
 
         self.out_layers = nn.Sequential(
-            # nn.AdaptiveAvgPool2d((1, 1)),
-            SelectPixel(relative_coords=(0,0)),
+            SelectPixel(relative_coords=(0, 0)),
             nn.Flatten(),
-            nn.Linear(mid_layer_size, num_classes),
+            ComplexLinear(mid_layer_size, num_classes),
+            ComplexAmplitude(),
         )
 
     def forward(
@@ -70,9 +62,7 @@ class Spectracles(nn.Module):
     ) -> Tensor:
 
         x = self.in_layers(x)
-
-        x = self.main_layers(x)
-
+        x = self.mid_layers(x)
         x = self.out_layers(x)
 
         return x
