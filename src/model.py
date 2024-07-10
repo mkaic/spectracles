@@ -1,6 +1,13 @@
 import torch.nn as nn
 from torch import Tensor
-from .layers import FourierBlock, SelectPixel, ComplexLinear, ComplexAmplitude
+
+from .layers import (
+    ComplexAmplitude,
+    ComplexLinear,
+    FourierBlock,
+    SelectPixel,
+    AddZeroImagComponent,
+)
 
 
 class Spectracles(nn.Module):
@@ -8,51 +15,41 @@ class Spectracles(nn.Module):
         self,
         input_channels,
         num_classes,
-        mid_layer_size,
-        num_layers,
-        n_linear_within_fourier,
-        normalization_dims,
+        blocks,
+        mlp_depth,
+        mlp_width,
         residual,
-        pe_freqs,
-        **kwargs
+        fourier_channels_proportion=None,
     ):
         super().__init__()
         self.input_channels = input_channels
         self.num_classes = num_classes
-        self.mid_layer_size = mid_layer_size
-        self.num_layers = num_layers
-        self.n_linear_within_fourier = n_linear_within_fourier
-        self.normalization_dims = normalization_dims
+        self.mlp_width = mlp_width
+        self.num_layers = blocks
+        self.mlp_depth = mlp_depth
         self.residual = residual
-        self.pe_freqs = pe_freqs
+        self.fourier_channels_proportion = fourier_channels_proportion
 
-        self.in_layers = FourierBlock(
-                3,
-                mid_layer_size,
-                residual=False,
-                n_linear=n_linear_within_fourier,
-                normalization_dims=normalization_dims,
-                pe_freqs=pe_freqs,
-            )
-        mid_layers = []
-        for _ in range(num_layers):
-            mid_layers.append(
+        self.in_layers = nn.Sequential(
+            nn.Conv2d(input_channels, mlp_width, kernel_size=1),
+            AddZeroImagComponent(),
+        )
+
+        self.mid_layers = nn.Sequential()
+        for _ in range(blocks):
+            self.mid_layers.append(
                 FourierBlock(
-                    mid_layer_size,
-                    mid_layer_size,
+                    in_channels=mlp_width,
+                    out_channels=mlp_width,
                     residual=residual,
-                    n_linear=n_linear_within_fourier,
-                    normalization_dims=normalization_dims,
-                    pe_freqs=pe_freqs,
+                    n_layers=mlp_depth,
+                    fourier_channels_proportion=fourier_channels_proportion,
                 )
             )
 
-        self.mid_layers = nn.Sequential(*mid_layers)
-
         self.out_layers = nn.Sequential(
             SelectPixel(relative_coords=(0, 0)),
-            nn.Flatten(),
-            ComplexLinear(mid_layer_size, num_classes),
+            ComplexLinear(mlp_width, num_classes),
             ComplexAmplitude(),
         )
 

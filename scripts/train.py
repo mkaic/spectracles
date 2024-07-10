@@ -1,15 +1,18 @@
-import torch
-from torchvision.datasets import CIFAR100
-import torchvision.transforms as tvt
-from ..src.model import Spectracles
-from torch.utils.data import DataLoader
-from torch.optim import AdamW
-import torch.nn as nn
-from tqdm import tqdm
-from pathlib import Path
-import wandb
-from argparse import ArgumentParser
 import warnings
+from argparse import ArgumentParser
+from pathlib import Path
+
+import torch
+import torch.nn as nn
+import torchvision.transforms as tvt
+from torch.optim import AdamW
+from torch.utils.data import DataLoader
+from torchvision.datasets import CIFAR100
+from tqdm import tqdm
+
+import wandb
+
+from ..src.model import Spectracles
 
 warnings.filterwarnings(
     "ignore", "Torchinductor does not support code generation for complex operators"
@@ -21,12 +24,11 @@ args = parser.parse_args()
 name = args.name
 
 args = dict(
-    mid_layer_size=16,
-    num_layers=3,
-    n_linear_within_fourier=1,
-    normalization_dims=(1, 2, 3),
+    blocks=4,
+    mlp_width=32,
+    mlp_depth=4,
     residual=True,
-    pe_freqs=4,
+    fourier_channels_proportion=0.5,
 )
 
 config = dict(
@@ -67,7 +69,6 @@ wandb.init(project="spectracles", config=config, name=name)
 train_transforms = (
     tvt.Compose(
         [
-            tvt.ToTensor(),
             tvt.RandomAffine(
                 degrees=15,
                 translate=(0.1, 0.1),
@@ -80,6 +81,7 @@ train_transforms = (
                 saturation=0.1,
                 hue=0.1,
             ),
+            tvt.ToTensor(),
         ]
     )
     if config["data_augmentation"]
@@ -135,7 +137,7 @@ for epoch in range(EPOCHS):
         optimizer.step()
 
         pbar.set_description(
-            f"Epoch {epoch} | Train Loss: {loss.item():.4f} | Train Acc: {train_accuracy:.2%} | Test Acc: {test_accuracy:.2%}"
+            f"Epoch {epoch} | Train Loss: {loss.item():.4f} | Train Err: {1 - train_accuracy:.2%} | Test Err: {1 - test_accuracy:.2%}"
         )
     train_accuracy = correct / total
 
