@@ -73,18 +73,14 @@ class ComplexActivation(nn.Module):
         )
 
 
-class Normalization(nn.Module):
-    def __init__(self, dims):
-        super().__init__()
-        self.dims = dims
-
+class LayerNorm(nn.Module):
     def forward(
         self,
         x: Tensor,
     ) -> Tensor:
 
-        return (x - x.mean(dim=self.dims, keepdim=True)) / (
-            x.std(dim=self.dims, keepdim=True) + 1e-6
+        return (x - x.mean(dim=(1,2,3), keepdim=True)) / (
+            x.std(dim=(1,2,3), keepdim=True) + 1e-6
         )
 
 
@@ -94,22 +90,23 @@ class AddZeroImagComponent(nn.Module):
 
 
 class FourierTransform(nn.Module):
-    def __init__(self, proportion_of_channels=None):
+    def __init__(self, channels_proportion=None):
         super().__init__()
-        self.first_n_channels = proportion_of_channels
+        self.channels_proportion = channels_proportion
 
     def forward(self, x: Tensor) -> Tensor:
         if not torch.is_complex(x):
             x = torch.view_as_complex(x)
 
         b, c, h, w = x.shape
-        if self.first_n_channels is None:
+        if self.channels_proportion is None:
             n = c
         else:
-            n = int(self.first_n_channels * c)
+            n = int(self.channels_proportion * c)
 
         x_ft = x[:, :n]
         x_ft = fft2(x_ft)
+
         x[:, :n] = x_ft
 
         x = torch.view_as_real(x)  # B, C, H, W, 2
@@ -117,10 +114,7 @@ class FourierTransform(nn.Module):
         return x
 
 
-class ComplexSinusoidalPositionEmbedding2D(nn.Module):
-    def __init__(self):
-        super().__init__()
-
+class ComplexPosEmbedding2D(nn.Module):
     def forward(self, x: Tensor) -> Tensor:
         b, c, h, w, _ = x.shape
 
@@ -128,7 +122,7 @@ class ComplexSinusoidalPositionEmbedding2D(nn.Module):
             torch.stack(
                 torch.meshgrid(
                     *[
-                        torch.arange(i, dtype=torch.float32, device=x.device) / (i - 1)
+                        torch.arange(i, dtype=torch.float32, device=x.device)
                         for i in (h, w)
                     ],
                     indexing="ij"
@@ -145,7 +139,7 @@ class ComplexSinusoidalPositionEmbedding2D(nn.Module):
 
         for freq in range(1, num_freqs + 1):
             for dim in range(2):
-                pos = positions[:, dim] * freq * 2 * torch.pi
+                pos = positions[:, dim] * (1 / (10000 ** (freq / num_freqs)))
                 cos = torch.cos(pos)
                 sin = torch.sin(pos)
                 complex_view = torch.stack([cos, sin], dim=-1)  # B, H, W, 2
@@ -156,67 +150,27 @@ class ComplexSinusoidalPositionEmbedding2D(nn.Module):
         return x + positions
 
 
-class SpectraclesLayer(nn.Module):
+class MLP(nn.Module):
     def __init__(
         self,
         in_channels,
         out_channels,
-        do_normalization=True,
-        do_activation=True,
-        fourier_channels_proportion=None,
-        do_fourier=False,
+        n_layers,
     ):
+
         super().__init__()
-        self.layers = nn.Sequential(
-            Normalization(dims=(1, 2, 3)) if do_normalization else nn.Identity(),
-            (
-                FourierTransform(proportion_of_channels=fourier_channels_proportion)
-                if do_fourier
-                else nn.Identity()
-            ),
-            ComplexSinusoidalPositionEmbedding2D(),
-            ComplexConv2d(in_channels, out_channels, kernel_size=1, padding=0),
-            ComplexActivation(nn.ReLU()) if do_activation else nn.Identity(),
-        )
+
+        self.layers = nn.Sequential()
+        for _ in range(n_layers - 1):
+            self.layers.extend(
+                [
+                    ComplexConv2d(in_channels, out_channels, kernel_size=1, padding=0),
+                    ComplexActivation(nn.ReLU()),
+                ]
+            )
 
     def forward(self, x: Tensor) -> Tensor:
         return self.layers(x)
-
-
-class FourierBlock(nn.Module):
-    def __init__(
-        self,
-        in_channels,
-        out_channels,
-        residual,
-        n_layers,
-        fourier_channels_proportion,
-    ):
-
-        super().__init__()
-
-        self.residual = residual
-
-        self.layers = nn.Sequential()
-        for i in range(n_layers):
-            self.layers.append(
-                SpectraclesLayer(
-                    in_channels=in_channels,
-                    out_channels=in_channels if i < n_layers - 1 else out_channels,
-                    do_fourier=i == 0,
-                    fourier_channels_proportion=fourier_channels_proportion,
-                    do_normalization=True,
-                    do_activation=i < n_layers - 1,
-                )
-            )
-
-        self.activation = ComplexActivation(nn.ReLU())
-
-    def forward(self, x: Tensor) -> Tensor:
-        if self.residual:
-            return self.activation(x + self.layers(x))
-        else:
-            return self.activation(self.layers(x))
 
 
 class SelectPixel(nn.Module):
@@ -234,8 +188,14 @@ class SelectPixel(nn.Module):
 
 
 class ComplexAmplitude(nn.Module):
-    def __init__(self):
-        super().__init__()
-
     def forward(self, x: Tensor) -> Tensor:
         return torch.norm(x, dim=-1)
+
+
+class Residual(nn.Module):
+    def __init__(self, layers):
+        super().__init__()
+        self.layers = nn.Sequential(*layers)
+
+    def forward(self, x: Tensor) -> Tensor:
+        return x + self.layers(x)

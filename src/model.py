@@ -4,9 +4,13 @@ from torch import Tensor
 from .layers import (
     ComplexAmplitude,
     ComplexLinear,
-    FourierBlock,
+    FourierTransform,
+    MLP,
     SelectPixel,
     AddZeroImagComponent,
+    LayerNorm,
+    Residual,
+    ComplexPosEmbedding2D
 )
 
 
@@ -18,7 +22,6 @@ class Spectracles(nn.Module):
         blocks,
         mlp_depth,
         mlp_width,
-        residual,
         fourier_channels_proportion=None,
     ):
         super().__init__()
@@ -27,7 +30,6 @@ class Spectracles(nn.Module):
         self.mlp_width = mlp_width
         self.num_layers = blocks
         self.mlp_depth = mlp_depth
-        self.residual = residual
         self.fourier_channels_proportion = fourier_channels_proportion
 
         self.in_layers = nn.Sequential(
@@ -37,14 +39,28 @@ class Spectracles(nn.Module):
 
         self.mid_layers = nn.Sequential()
         for _ in range(blocks):
-            self.mid_layers.append(
-                FourierBlock(
-                    in_channels=mlp_width,
-                    out_channels=mlp_width,
-                    residual=residual,
-                    n_layers=mlp_depth,
-                    fourier_channels_proportion=fourier_channels_proportion,
-                )
+            self.mid_layers.extend(
+                [
+                    Residual(
+                        (
+                            FourierTransform(
+                                channels_proportion=fourier_channels_proportion,
+                            ),
+                        )
+                    ),
+                    LayerNorm(),
+                    ComplexPosEmbedding2D(),
+                    Residual(
+                        (
+                            MLP(
+                                in_channels=mlp_width,
+                                out_channels=mlp_width,
+                                n_layers=mlp_depth,
+                            ),
+                        )
+                    ),
+                    LayerNorm(),
+                ]
             )
 
         self.out_layers = nn.Sequential(
