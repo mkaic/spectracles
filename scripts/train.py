@@ -3,7 +3,7 @@ from torchvision.datasets import CIFAR100
 import torchvision.transforms as tvt
 from ..src.model import Spectracles
 from torch.utils.data import DataLoader
-from torch.optim import Adam
+from torch.optim import AdamW
 import torch.nn as nn
 from tqdm import tqdm
 from pathlib import Path
@@ -21,12 +21,12 @@ args = parser.parse_args()
 name = args.name
 
 args = dict(
-    mid_layer_size=32,
-    num_layers=4,
-    n_linear_within_fourier=2,
+    mid_layer_size=16,
+    num_layers=3,
+    n_linear_within_fourier=1,
     normalization_dims=(1, 2, 3),
     residual=True,
-    pe_freqs=6,
+    pe_freqs=4,
 )
 
 config = dict(
@@ -36,7 +36,7 @@ config = dict(
     data_augmentation=False,
 )
 
-EPOCHS = 1000
+EPOCHS = 50
 SAVE = False
 
 print("\n", args)
@@ -102,7 +102,7 @@ test_loader = DataLoader(
 )
 
 # Train the model
-optimizer = Adam(model.parameters(), lr=config["lr"])
+optimizer = AdamW(model.parameters(), lr=config["lr"])
 
 train_accuracy = 0
 test_accuracy = 0

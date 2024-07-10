@@ -80,7 +80,7 @@ class ComplexActivation(nn.Module):
         )
 
 
-class ComplexNormalization(nn.Module):
+class Normalization(nn.Module):
     def __init__(self, dims):
         super().__init__()
         self.dims = dims
@@ -90,25 +90,7 @@ class ComplexNormalization(nn.Module):
         x: Tensor,
     ) -> Tensor:
         
-        if torch.is_complex(x):
-
-            x = torch.view_as_real(x)
-            x_real = x[..., 0]
-            x_imag = x[..., 1]
-
-            return torch.view_as_complex(
-                torch.stack(
-                    [
-                        (x_real - x_real.mean(dim=self.dims, keepdim=True))
-                        / (x_real.std(dim=self.dims, keepdim=True) + 1e-6),
-                        (x_imag - x_imag.mean(dim=self.dims, keepdim=True))
-                        / (x_imag.std(dim=self.dims, keepdim=True) + 1e-6),
-                    ],
-                    dim=-1,
-                )
-            )
-        else:
-            return (x - x.mean(dim=self.dims, keepdim=True)) / (
+        return (x - x.mean(dim=self.dims, keepdim=True)) / (
                 x.std(dim=self.dims, keepdim=True) + 1e-6
             )
 
@@ -183,7 +165,7 @@ class FourierBlock(nn.Module):
         self.residual = residual
 
         self.layers = [
-            ComplexNormalization(dims=normalization_dims),
+            Normalization(dims=normalization_dims),
             FourierTransform(),
             ComplexSinusoidalPositionEmbedding2D(num_freqs=pe_freqs),
             ComplexConv2d(
@@ -197,7 +179,7 @@ class FourierBlock(nn.Module):
             self.layers.extend(
                 [
                     ComplexActivation(nn.ReLU()),
-                    ComplexNormalization(dims=normalization_dims),
+                    Normalization(dims=normalization_dims),
                     ComplexSinusoidalPositionEmbedding2D(num_freqs=pe_freqs),
                     ComplexConv2d(
                         kernel_size=1,
@@ -210,7 +192,7 @@ class FourierBlock(nn.Module):
         self.layers.extend(
             [
                 ComplexActivation(nn.ReLU()),
-                ComplexNormalization(dims=normalization_dims),
+                Normalization(dims=normalization_dims),
                 ComplexSinusoidalPositionEmbedding2D(num_freqs=pe_freqs),
                 ComplexConv2d(
                     kernel_size=1,
