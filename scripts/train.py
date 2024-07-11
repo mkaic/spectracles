@@ -24,8 +24,8 @@ args = parser.parse_args()
 name = args.name
 
 args = dict(
-    blocks=4,
-    mlp_width=96,
+    blocks=2,
+    mlp_width=136,
     mlp_depth=4,
 )
 
@@ -33,7 +33,7 @@ config = dict(
     **args,
     batch_size=128,
     lr=1e-3,
-    data_augmentation=False,
+    data_augmentation=True,
 )
 
 EPOCHS = 1000
