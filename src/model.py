@@ -7,10 +7,10 @@ from .layers import (
     FourierTransform,
     MLP,
     SelectPixel,
-    AddZeroImagComponent,
+    ComplexProjection,
     LayerNorm,
     Residual,
-    ComplexPosEmbedding2D
+    ComplexPosEmbedding2D,
 )
 
 
@@ -34,7 +34,7 @@ class Spectracles(nn.Module):
 
         self.in_layers = nn.Sequential(
             nn.Conv2d(input_channels, mlp_width, kernel_size=1),
-            AddZeroImagComponent(),
+            ComplexProjection(),
         )
 
         self.mid_layers = nn.Sequential()
@@ -43,23 +43,18 @@ class Spectracles(nn.Module):
                 [
                     Residual(
                         (
+                            LayerNorm(),
                             FourierTransform(
                                 channels_proportion=fourier_channels_proportion,
                             ),
-                        )
-                    ),
-                    LayerNorm(),
-                    ComplexPosEmbedding2D(),
-                    Residual(
-                        (
+                            ComplexPosEmbedding2D(),
                             MLP(
                                 in_channels=mlp_width,
                                 out_channels=mlp_width,
                                 n_layers=mlp_depth,
                             ),
                         )
-                    ),
-                    LayerNorm(),
+                    )
                 ]
             )
 

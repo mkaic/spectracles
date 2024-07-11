@@ -79,12 +79,12 @@ class LayerNorm(nn.Module):
         x: Tensor,
     ) -> Tensor:
 
-        return (x - x.mean(dim=(1,2,3), keepdim=True)) / (
-            x.std(dim=(1,2,3), keepdim=True) + 1e-6
+        return (x - x.mean(dim=(1, 2, 3), keepdim=True)) / (
+            x.std(dim=(1, 2, 3), keepdim=True) + 1e-6
         )
 
 
-class AddZeroImagComponent(nn.Module):
+class ComplexProjection(nn.Module):
     def forward(self, x: Tensor) -> Tensor:
         return torch.stack([x, torch.zeros_like(x)], dim=-1)
 
@@ -164,6 +164,7 @@ class MLP(nn.Module):
         for _ in range(n_layers - 1):
             self.layers.extend(
                 [
+                    LayerNorm(),
                     ComplexConv2d(in_channels, out_channels, kernel_size=1, padding=0),
                     ComplexActivation(nn.ReLU()),
                 ]
