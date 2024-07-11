@@ -102,7 +102,7 @@ class FourierTransform(nn.Module):
     @torch.compiler.disable()
     def forward(self, x: Tensor) -> Tensor:
         if not torch.is_complex(x):
-            x = torch.view_as_complex(x)
+            x = torch.view_as_complex(x.contiguous())
 
         x = fftn(x, dim=self.dim)
 

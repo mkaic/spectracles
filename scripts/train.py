@@ -29,7 +29,7 @@ DEVICE = f"cuda:{gpu}" if torch.cuda.is_available() else "cpu"
 DTYPE = torch.float32
 
 args = dict(
-    blocks=6,
+    blocks=3,
     mlp_width=226,
     mlp_depth=3,
 )
