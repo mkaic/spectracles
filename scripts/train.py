@@ -60,7 +60,7 @@ print(model)
 num_params = sum(p.numel() for p in model.parameters())
 print(f"{num_params:,} trainable parameters")
 
-# model = torch.compile(model)
+model = torch.compile(model, )
 
 config["num_params"] = num_params
 
@@ -106,6 +106,10 @@ test_loader = DataLoader(
 # Train the model
 optimizer = AdamW(model.parameters(), lr=config["lr"])
 
+@torch.compile()
+def optimizer_step():
+    optimizer.step()
+
 train_accuracy = 0
 test_accuracy = 0
 for epoch in range(EPOCHS):
@@ -134,7 +138,7 @@ for epoch in range(EPOCHS):
         losses.append(loss.item())
         loss.backward()
 
-        optimizer.step()
+        optimizer_step()
 
         pbar.set_description(
             f"Epoch {epoch} | Train Loss: {loss.item():.4f} | Train Err: {1 - train_accuracy:.2%} | Test Err: {1 - test_accuracy:.2%}"

@@ -43,7 +43,7 @@ class Spectracles(nn.Module):
                     Residual(
                         (
                             LayerNorm(),
-                            FourierTransform(dim=(2, 3)),
+                            FourierTransform(dim=(2,3)),
                             ComplexPositionEncoding2D(),
                             self.mlp,
                         )

@@ -99,6 +99,7 @@ class FourierTransform(nn.Module):
         super().__init__()
         self.dim = dim
 
+    @torch.compiler.disable()
     def forward(self, x: Tensor) -> Tensor:
         if not torch.is_complex(x):
             x = torch.view_as_complex(x)
@@ -143,14 +144,7 @@ class ComplexPositionEncoding2D(nn.Module):
 
         positions = torch.stack(freq_bands, dim=1)  # B, C, H, W, 2
 
-        # return x + positions
         return x * positions
-
-
-class Abs(nn.Module):
-    def forward(self, x: Tensor) -> Tensor:
-        return torch.abs(x)
-
 
 class MLP(nn.Module):
     def __init__(
@@ -171,7 +165,7 @@ class MLP(nn.Module):
                     ComplexActivation(nn.ReLU()),
                 ]
             )
-
+    @torch.compile()
     def forward(self, x: Tensor) -> Tensor:
         return self.layers(x)
 
