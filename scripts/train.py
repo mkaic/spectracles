@@ -27,7 +27,7 @@ args = dict(
     blocks=4,
     mlp_width=32,
     mlp_depth=4,
-    fourier_channels_proportion=None,
+    fourier_channels_proportion=0.5,
 )
 
 config = dict(
