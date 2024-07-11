@@ -25,9 +25,8 @@ name = args.name
 
 args = dict(
     blocks=4,
-    mlp_width=32,
+    mlp_width=96,
     mlp_depth=4,
-    fourier_channels_proportion=0.5,
 )
 
 config = dict(
@@ -37,7 +36,7 @@ config = dict(
     data_augmentation=False,
 )
 
-EPOCHS = 50
+EPOCHS = 1000
 SAVE = False
 
 print("\n", args)

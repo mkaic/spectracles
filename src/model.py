@@ -6,7 +6,7 @@ from .layers import (
     ComplexLinear,
     FourierTransform,
     MLP,
-    SelectPixel,
+    ComplexPool,
     ComplexProjection,
     LayerNorm,
     Residual,
@@ -22,7 +22,6 @@ class Spectracles(nn.Module):
         blocks,
         mlp_depth,
         mlp_width,
-        fourier_channels_proportion=None,
     ):
         super().__init__()
         self.input_channels = input_channels
@@ -30,7 +29,6 @@ class Spectracles(nn.Module):
         self.mlp_width = mlp_width
         self.num_layers = blocks
         self.mlp_depth = mlp_depth
-        self.fourier_channels_proportion = fourier_channels_proportion
 
         self.in_layers = nn.Sequential(
             nn.Conv2d(input_channels, mlp_width, kernel_size=1),
@@ -44,9 +42,7 @@ class Spectracles(nn.Module):
                     Residual(
                         (
                             LayerNorm(),
-                            FourierTransform(
-                                channels_proportion=fourier_channels_proportion,
-                            ),
+                            FourierTransform(),
                             ComplexPosEmbedding2D(),
                             MLP(
                                 in_channels=mlp_width,
@@ -59,7 +55,7 @@ class Spectracles(nn.Module):
             )
 
         self.out_layers = nn.Sequential(
-            SelectPixel(relative_coords=(0, 0)),
+            ComplexPool(),
             ComplexLinear(mlp_width, num_classes),
             ComplexAmplitude(),
         )

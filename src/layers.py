@@ -89,25 +89,17 @@ class ComplexProjection(nn.Module):
         return torch.stack([x, torch.zeros_like(x)], dim=-1)
 
 
-class FourierTransform(nn.Module):
-    def __init__(self, channels_proportion=None):
-        super().__init__()
-        self.channels_proportion = channels_proportion
+class ComplexPool(nn.Module):
+    def forward(self, x: Tensor) -> Tensor:
+        return x.mean(dim=(-2, -3))
 
+
+class FourierTransform(nn.Module):
     def forward(self, x: Tensor) -> Tensor:
         if not torch.is_complex(x):
             x = torch.view_as_complex(x)
 
-        b, c, h, w = x.shape
-        if self.channels_proportion is None:
-            n = c
-        else:
-            n = int(self.channels_proportion * c)
-
-        x_ft = x[:, :n]
-        x_ft = fft2(x_ft)
-
-        x[:, :n] = x_ft
+        x = fft2(x)
 
         x = torch.view_as_real(x)  # B, C, H, W, 2
 
@@ -147,7 +139,13 @@ class ComplexPosEmbedding2D(nn.Module):
 
         positions = torch.stack(freq_bands, dim=1)  # B, C, H, W, 2
 
-        return x + positions
+        # return x + positions
+        return x * positions
+
+
+class Abs(nn.Module):
+    def forward(self, x: Tensor) -> Tensor:
+        return torch.abs(x)
 
 
 class MLP(nn.Module):
@@ -172,20 +170,6 @@ class MLP(nn.Module):
 
     def forward(self, x: Tensor) -> Tensor:
         return self.layers(x)
-
-
-class SelectPixel(nn.Module):
-    def __init__(self, relative_coords):
-        super().__init__()
-        self.relative_coords = relative_coords
-
-    def forward(self, x: Tensor) -> Tensor:
-        b, c, h, w, _ = x.shape
-        i = int(self.relative_coords[0] * (h - 1))
-        j = int(self.relative_coords[1] * (w - 1))
-        x = x[:, :, i, j]
-
-        return x
 
 
 class ComplexAmplitude(nn.Module):
