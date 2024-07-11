@@ -30,7 +30,7 @@ DTYPE = torch.float32
 
 args = dict(
     blocks=3,
-    mlp_width=226,
+    mlp_width=50,
     mlp_depth=3,
 )
 
@@ -38,7 +38,7 @@ config = dict(
     **args,
     batch_size=128,
     lr=1e-3,
-    data_augmentation=True,
+    data_augmentation=False,
 )
 
 EPOCHS = 1000
@@ -60,7 +60,7 @@ print(model)
 num_params = sum(p.numel() for p in model.parameters())
 print(f"{num_params:,} trainable parameters")
 
-model = torch.compile(model, )
+# model = torch.compile(model, )
 
 config["num_params"] = num_params
 

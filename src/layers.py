@@ -174,7 +174,6 @@ class ComplexAmplitude(nn.Module):
     def forward(self, x: Tensor) -> Tensor:
         return torch.norm(x, dim=-1)
 
-
 class Residual(nn.Module):
     def __init__(self, layers):
         super().__init__()
