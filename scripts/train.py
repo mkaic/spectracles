@@ -20,13 +20,18 @@ warnings.filterwarnings(
 
 parser = ArgumentParser()
 parser.add_argument("-n", "--name", type=str, default=None)
+parser.add_argument("-g", "--gpu", type=int, default=0)
 args = parser.parse_args()
 name = args.name
+gpu = args.gpu
+
+DEVICE = f"cuda:{gpu}" if torch.cuda.is_available() else "cpu"
+DTYPE = torch.float32
 
 args = dict(
-    blocks=2,
-    mlp_width=136,
-    mlp_depth=4,
+    blocks=6,
+    mlp_width=226,
+    mlp_depth=3,
 )
 
 config = dict(
@@ -40,9 +45,6 @@ EPOCHS = 1000
 SAVE = False
 
 print("\n", args)
-
-DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-DTYPE = torch.float32
 
 if not Path("spectracles/weights").exists():
     Path("spectracles/weights").mkdir(parents=True)

@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 from torch import Tensor
-from torch.fft import fft2
+from torch.fft import fft2, fftn
 
 
 # Slightly modified from https://github.com/mehdihosseinimoghadam/Complex-Neural-Networks/blob/main/complex_neural_net.py
@@ -95,18 +95,22 @@ class ComplexPool(nn.Module):
 
 
 class FourierTransform(nn.Module):
+    def __init__(self, dim: int):
+        super().__init__()
+        self.dim = dim
+
     def forward(self, x: Tensor) -> Tensor:
         if not torch.is_complex(x):
             x = torch.view_as_complex(x)
 
-        x = fft2(x)
+        x = fftn(x, dim=self.dim)
 
         x = torch.view_as_real(x)  # B, C, H, W, 2
 
         return x
 
 
-class ComplexPosEmbedding2D(nn.Module):
+class ComplexPositionEncoding2D(nn.Module):
     def forward(self, x: Tensor) -> Tensor:
         b, c, h, w, _ = x.shape
 
