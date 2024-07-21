@@ -7,7 +7,7 @@ import torch.nn as nn
 import torchvision.transforms as tvt
 from torch.optim import AdamW
 from torch.utils.data import DataLoader
-from torchvision.datasets import CIFAR100
+from torchvision.datasets import CIFAR100, CIFAR10
 from tqdm import tqdm
 
 import wandb
@@ -30,7 +30,7 @@ DTYPE = torch.float32
 
 args = dict(
     blocks=6,
-    mlp_width=128,
+    mlp_width=64,
     mlp_depth=3,
 )
 
@@ -51,7 +51,7 @@ if not Path("spectracles/weights").exists():
 
 loss_function = nn.CrossEntropyLoss()
 
-model = Spectracles(num_classes=100, input_channels=3, **args)
+model = Spectracles(num_classes=10, input_channels=3, **args)
 model = model.to(DEVICE)
 model = model.to(DTYPE)
 
@@ -87,10 +87,10 @@ train_transforms = (
 )
 
 # Load the MNIST dataset
-train = CIFAR100(
+train = CIFAR10(
     root="./spectracles/data", train=True, download=True, transform=train_transforms
 )
-test = CIFAR100(
+test = CIFAR10(
     root="./spectracles/data", train=False, download=True, transform=tvt.ToTensor()
 )
 

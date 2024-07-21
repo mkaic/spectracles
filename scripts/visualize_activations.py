@@ -13,9 +13,11 @@ with torch.no_grad():
     DTYPE = torch.float32
     DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
+    epoch = 1
+
     args = dict(
         blocks=6,
-        mlp_width=128,
+        mlp_width=64,
         mlp_depth=3,
     )
 
@@ -28,8 +30,8 @@ with torch.no_grad():
 
     weights_path = Path("spectracles/weights")
 
-    model = Spectracles(num_classes=100, input_channels=3, **args)
-    model.load_state_dict(torch.load(weights_path / "006.ckpt"))
+    model = Spectracles(num_classes=10, input_channels=3, **args)
+    model.load_state_dict(torch.load(weights_path / f"{epoch:03}.ckpt"))
     model = model.to(DEVICE)
     model = model.to(DTYPE)
     model = model.eval()
