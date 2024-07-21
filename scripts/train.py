@@ -42,7 +42,7 @@ config = dict(
 )
 
 EPOCHS = 1000
-SAVE = False
+SAVE = True
 
 print("\n", args)
 
@@ -127,7 +127,6 @@ for epoch in range(EPOCHS):
 
         predictions = model(images)
 
-        predictions = model(images)
         _, predicted = torch.max(predictions, dim=1)
 
         total += labels.shape[0]
