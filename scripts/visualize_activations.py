@@ -14,8 +14,8 @@ with torch.no_grad():
     DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
     args = dict(
-        blocks=4,
-        mlp_width=256,
+        blocks=6,
+        mlp_width=128,
         mlp_depth=3,
     )
 
@@ -29,7 +29,7 @@ with torch.no_grad():
     weights_path = Path("spectracles/weights")
 
     model = Spectracles(num_classes=100, input_channels=3, **args)
-    model.load_state_dict(torch.load(weights_path / "005.ckpt"))
+    model.load_state_dict(torch.load(weights_path / "006.ckpt"))
     model = model.to(DEVICE)
     model = model.to(DTYPE)
     model = model.eval()
@@ -37,7 +37,7 @@ with torch.no_grad():
     activations = {}
     def get_activation(name):
         def hook(model, input, output):
-            activations[name] = torch.norm(output[:, 1], dim=-1).cpu()
+            activations[name] = torch.norm(output[:, 0], dim=-1).cpu()
         return hook
         
     for name, layer in model.mid_layers.named_children():

@@ -9,8 +9,10 @@ from .layers import (
     ComplexPool,
     ComplexProjection,
     LayerNorm,
-    Residual,
+    PixelNorm,
+    WeightedResidual,
     ComplexPositionEncoding2D,
+    ComplexDropout,
 )
 
 
@@ -34,19 +36,20 @@ class Spectracles(nn.Module):
             nn.Conv2d(input_channels, mlp_width, kernel_size=1),
             ComplexProjection(),
         )
-        # self.mlp = MLP(mlp_width, mlp_width, mlp_depth)
 
         self.mid_layers = nn.Sequential()
         for _ in range(blocks):
             self.mid_layers.extend(
                 [
-                    Residual(
+                    WeightedResidual(
                         (
                             LayerNorm(),
                             FourierTransform(dim=(2,3)),
+                            ComplexDropout(0.1),
                             ComplexPositionEncoding2D(),
                             MLP(mlp_width, mlp_width, mlp_depth),
-                        )
+                        ),
+                        mlp_width,
                     )
                 ]
             )

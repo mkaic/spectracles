@@ -29,8 +29,8 @@ DEVICE = f"cuda:{gpu}" if torch.cuda.is_available() else "cpu"
 DTYPE = torch.float32
 
 args = dict(
-    blocks=4,
-    mlp_width=256,
+    blocks=6,
+    mlp_width=128,
     mlp_depth=3,
 )
 
@@ -38,7 +38,7 @@ config = dict(
     **args,
     batch_size=128,
     lr=1e-3,
-    data_augmentation=True,
+    data_augmentation=False,
 )
 
 EPOCHS = 1000
@@ -59,8 +59,6 @@ print(model)
 
 num_params = sum(p.numel() for p in model.parameters())
 print(f"{num_params:,} trainable parameters")
-
-# model = torch.compile(model, )
 
 config["num_params"] = num_params
 
@@ -106,10 +104,6 @@ test_loader = DataLoader(
 # Train the model
 optimizer = AdamW(model.parameters(), lr=config["lr"])
 
-@torch.compile()
-def optimizer_step():
-    optimizer.step()
-
 train_accuracy = 0
 test_accuracy = 0
 for epoch in range(EPOCHS):
@@ -119,7 +113,7 @@ for epoch in range(EPOCHS):
     total = 0
     correct = 0
     losses = []
-    for images, labels in pbar:
+    for step, (images, labels) in enumerate(pbar):
         optimizer.zero_grad()
 
         images, labels = images.to(DEVICE), labels.to(DEVICE)
@@ -129,15 +123,16 @@ for epoch in range(EPOCHS):
 
         _, predicted = torch.max(predictions, dim=1)
 
-        total += labels.shape[0]
-        correct += (predicted == labels).sum().item()
+        if step > len(train_loader) * 0.9:
+            total += labels.shape[0]
+            correct += (predicted == labels).sum().item()
 
         loss = loss_function(predictions, labels)
 
         losses.append(loss.item())
         loss.backward()
 
-        optimizer_step()
+        optimizer.step()
 
         pbar.set_description(
             f"Epoch {epoch} | Train Loss: {loss.item():.4f} | Train Err: {1 - train_accuracy:.2%} | Test Err: {1 - test_accuracy:.2%}"
