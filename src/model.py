@@ -34,7 +34,7 @@ class Spectracles(nn.Module):
             nn.Conv2d(input_channels, mlp_width, kernel_size=1),
             ComplexProjection(),
         )
-        self.mlp = MLP(mlp_width, mlp_width, mlp_depth)
+        # self.mlp = MLP(mlp_width, mlp_width, mlp_depth)
 
         self.mid_layers = nn.Sequential()
         for _ in range(blocks):
@@ -45,7 +45,7 @@ class Spectracles(nn.Module):
                             LayerNorm(),
                             FourierTransform(dim=(2,3)),
                             ComplexPositionEncoding2D(),
-                            self.mlp,
+                            MLP(mlp_width, mlp_width, mlp_depth),
                         )
                     )
                 ]

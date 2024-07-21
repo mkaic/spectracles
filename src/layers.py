@@ -104,7 +104,7 @@ class FourierTransform(nn.Module):
         if not torch.is_complex(x):
             x = torch.view_as_complex(x.contiguous())
 
-        x = fftn(x, dim=self.dim)
+        x = fftn(x, dim=self.dim, norm="ortho")
 
         x = torch.view_as_real(x)  # B, C, H, W, 2
 
@@ -165,7 +165,6 @@ class MLP(nn.Module):
                     ComplexActivation(nn.ReLU()),
                 ]
             )
-    @torch.compile()
     def forward(self, x: Tensor) -> Tensor:
         return self.layers(x)
 
