@@ -16,8 +16,8 @@ with torch.no_grad():
     epoch = 1
 
     args = dict(
-        blocks=6,
-        mlp_width=64,
+        blocks=16,
+        mlp_width=32,
         mlp_depth=3,
     )
 

@@ -6,6 +6,7 @@ import torch
 import torch.nn as nn
 import torchvision.transforms as tvt
 from torch.optim import AdamW
+from torch.optim.lr_scheduler import CosineAnnealingLR
 from torch.utils.data import DataLoader
 from torchvision.datasets import CIFAR100, CIFAR10
 from tqdm import tqdm
@@ -29,8 +30,8 @@ DEVICE = f"cuda:{gpu}" if torch.cuda.is_available() else "cpu"
 DTYPE = torch.float32
 
 args = dict(
-    blocks=6,
-    mlp_width=64,
+    blocks=24,
+    mlp_width=32,
     mlp_depth=3,
 )
 
@@ -41,7 +42,7 @@ config = dict(
     data_augmentation=False,
 )
 
-EPOCHS = 1000
+EPOCHS = 100
 SAVE = True
 
 print("\n", args)
@@ -104,6 +105,8 @@ test_loader = DataLoader(
 # Train the model
 optimizer = AdamW(model.parameters(), lr=config["lr"])
 
+scheduler = CosineAnnealingLR(optimizer, EPOCHS)
+
 train_accuracy = 0
 test_accuracy = 0
 for epoch in range(EPOCHS):
@@ -137,6 +140,8 @@ for epoch in range(EPOCHS):
         pbar.set_description(
             f"Epoch {epoch} | Train Loss: {loss.item():.4f} | Train Err: {1 - train_accuracy:.2%} | Test Err: {1 - test_accuracy:.2%}"
         )
+
+    scheduler.step()
     train_accuracy = correct / total
 
     model.eval()
@@ -167,5 +172,6 @@ for epoch in range(EPOCHS):
             "train_loss": torch.tensor(losses).mean(),
             "train_accuracy": train_accuracy,
             "test_accuracy": test_accuracy,
+            "lr": scheduler.get_last_lr()[0],
         }
     )
