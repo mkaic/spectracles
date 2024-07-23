@@ -6,7 +6,7 @@ import torch
 import torch.nn as nn
 import torchvision.transforms as tvt
 from torch.optim import AdamW
-from torch.optim.lr_scheduler import CosineAnnealingLR
+from torch.optim.lr_scheduler import StepLR
 from torch.utils.data import DataLoader
 from torchvision.datasets import CIFAR100, CIFAR10
 from tqdm import tqdm
@@ -30,16 +30,16 @@ DEVICE = f"cuda:{gpu}" if torch.cuda.is_available() else "cpu"
 DTYPE = torch.float32
 
 args = dict(
-    blocks=24,
-    mlp_width=32,
+    blocks=6,
+    mlp_width=64,
     mlp_depth=3,
 )
 
 config = dict(
     **args,
-    batch_size=128,
+    batch_size=1024,
     lr=1e-3,
-    data_augmentation=False,
+    data_augmentation=True,
 )
 
 EPOCHS = 100
@@ -69,10 +69,10 @@ train_transforms = (
     tvt.Compose(
         [
             tvt.RandomAffine(
-                degrees=15,
+                degrees=5,
                 translate=(0.1, 0.1),
                 scale=(0.9, 1.1),
-                shear=15,
+                shear=5,
             ),
             tvt.ColorJitter(
                 brightness=0.1,
@@ -105,7 +105,7 @@ test_loader = DataLoader(
 # Train the model
 optimizer = AdamW(model.parameters(), lr=config["lr"])
 
-scheduler = CosineAnnealingLR(optimizer, EPOCHS)
+scheduler = StepLR(optimizer, step_size=20, gamma=0.5)
 
 train_accuracy = 0
 test_accuracy = 0
@@ -123,6 +123,7 @@ for epoch in range(EPOCHS):
         images, labels = images.to(DTYPE), labels.to(torch.long)
 
         predictions = model(images)
+        
 
         _, predicted = torch.max(predictions, dim=1)
 
