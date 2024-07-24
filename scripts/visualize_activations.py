@@ -13,11 +13,11 @@ with torch.no_grad():
     DTYPE = torch.float32
     DEVICE = "cuda:1" if torch.cuda.is_available() else "cpu"
 
-    epoch = 40
+    epoch = 1
 
     args = dict(
-        blocks=3,
-        width=32,
+        blocks=6,
+        width=48,
     )
 
     config = dict(
@@ -73,8 +73,9 @@ with torch.no_grad():
         activations[key] = value[:4]
 
     # Create a grid of plots
-    fig = plt.figure(figsize=(12, 12))
-    outer_grid = fig.subfigures(4, 4)
+    aspect_ratio = len(to_plot) / 4
+    fig = plt.figure(figsize=(int(12 * aspect_ratio), 12))
+    outer_grid = fig.subfigures(4, len(to_plot))
 
     for row_idx in range(4):
         for col_idx, (name, tensor) in enumerate(to_plot.items()):
