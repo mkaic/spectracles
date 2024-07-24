@@ -176,7 +176,7 @@ class ComplexPositionEncoding2D(nn.Module):
         return x * positions
 
 
-class ComplexDropout(nn.Module):
+class PixelDropout(nn.Module):
     def __init__(self, p: float):
         super().__init__()
         self.p = p
@@ -186,13 +186,9 @@ class ComplexDropout(nn.Module):
             return x
         else:
             mask = torch.rand_like(x[..., 0]) > self.p
-            real = x[..., 0]
-            imag = x[..., 1]
+            mask = mask.unsqueeze(-1).expand_as(x)
 
-            real = torch.where(mask, real, torch.ones_like(real))
-            imag = torch.where(mask, imag, torch.zeros_like(imag))
-
-            return torch.stack([real, imag], dim=-1)
+            return x * mask
 
 
 class MLP(nn.Module):

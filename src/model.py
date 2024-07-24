@@ -4,7 +4,7 @@ from torch import Tensor
 from .layers import (
     MLP,
     ComplexAmplitude,
-    ComplexDropout,
+    PixelDropout,
     ComplexLinear,
     ComplexPool,
     ComplexProjection,
@@ -32,7 +32,7 @@ class Spectracles(nn.Module):
 
         self.in_layers = nn.Sequential(
             nn.Conv2d(input_channels, width, kernel_size=1),
-            PixelNorm(),
+            ImageNorm(),
             ComplexProjection(),
         )
 
@@ -47,6 +47,7 @@ class Spectracles(nn.Module):
                             ImageNorm(),
                             MLP(width),
                             ImageNorm(),
+                            PixelDropout(0.1),
                             InverseFourierTransform(dim=(1, 2, 3)),
                             ImageNorm(),
                             MLP(width),
