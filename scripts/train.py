@@ -31,15 +31,14 @@ DTYPE = torch.float32
 
 args = dict(
     blocks=6,
-    mlp_width=64,
-    mlp_depth=3,
+    width=32,
 )
 
 config = dict(
     **args,
-    batch_size=1024,
+    batch_size=128,
     lr=1e-3,
-    data_augmentation=True,
+    data_augmentation=False,
 )
 
 EPOCHS = 100
@@ -123,7 +122,6 @@ for epoch in range(EPOCHS):
         images, labels = images.to(DTYPE), labels.to(torch.long)
 
         predictions = model(images)
-        
 
         _, predicted = torch.max(predictions, dim=1)
 

@@ -73,24 +73,16 @@ class ComplexActivation(nn.Module):
         )
 
 
-class LayerNorm(nn.Module):
-    def forward(
-        self,
-        x: Tensor,
-    ) -> Tensor:
-
-        return (x - x.mean(dim=(1, 2, 3), keepdim=True)) / (
-            x.std(dim=(1, 2, 3), keepdim=True) + 1e-6
-        )
-    
 class PixelNorm(nn.Module):
+    def __init__(self):
+        super().__init__()
+
     def forward(
         self,
         x: Tensor,
     ) -> Tensor:
-        return (x - x.mean(dim=1, keepdim=True)) / (
-            x.std(dim=1, keepdim=True) + 1e-6
-        )
+        x = (x - x.mean(dim=1, keepdim=True)) / (x.std(dim=1, keepdim=True) + 1e-6)
+        return
 
 
 class ComplexProjection(nn.Module):
@@ -154,7 +146,8 @@ class ComplexPositionEncoding2D(nn.Module):
         positions = torch.stack(freq_bands, dim=1)  # B, C, H, W, 2
 
         return x * positions
-    
+
+
 class ComplexDropout(nn.Module):
     def __init__(self, p: float):
         super().__init__()
@@ -167,31 +160,29 @@ class ComplexDropout(nn.Module):
             mask = torch.rand_like(x[..., 0]) > self.p
             real = x[..., 0]
             imag = x[..., 1]
-            
+
             real = torch.where(mask, real, torch.ones_like(real))
             imag = torch.where(mask, imag, torch.zeros_like(imag))
 
             return torch.stack([real, imag], dim=-1)
 
+
 class MLP(nn.Module):
     def __init__(
         self,
-        in_channels,
-        out_channels,
-        n_layers,
+        width: int,
     ):
 
         super().__init__()
 
-        self.layers = nn.Sequential()
-        for _ in range(n_layers - 1):
-            self.layers.extend(
-                [
-                    LayerNorm(),
-                    ComplexConv2d(in_channels, out_channels, kernel_size=1, padding=0),
-                    ComplexActivation(nn.ReLU()),
-                ]
-            )
+        self.layers = nn.Sequential(
+            PixelNorm(),
+            ComplexPositionEncoding2D(),
+            ComplexConv2d(width, width, kernel_size=1, padding=0),
+            ComplexActivation(nn.GELU()),
+            ComplexConv2d(width, width, kernel_size=1, padding=0),
+        )
+
     def forward(self, x: Tensor) -> Tensor:
         return self.layers(x)
 
@@ -199,26 +190,41 @@ class MLP(nn.Module):
 class ComplexAmplitude(nn.Module):
     def forward(self, x: Tensor) -> Tensor:
         return torch.norm(x, dim=-1)
-    
-class ComplexChannelScale(nn.Module):
-    def __init__(self, channels):
-        super().__init__()
-        self.channels = channels
-        self.scales = torch.ones(channels, 1, 1)
-        self.scales = torch.stack([self.scales, torch.zeros_like(self.scales)], dim=-1)
-        self.scales = nn.Parameter(self.scales)
-    
-    def forward(self, x: Tensor) -> Tensor:
-        return x * self.scales
 
-class WeightedResidual(nn.Module):
-    def __init__(self, layers, channels):
+
+class Residual(nn.Module):
+    def __init__(self, layers):
         super().__init__()
         self.layers = nn.Sequential(*layers)
-        self.ch_scale_a = ComplexChannelScale(channels)
-        self.ch_scale_b = ComplexChannelScale(channels)
-        
 
     def forward(self, x: Tensor) -> Tensor:
 
-        return self.ch_scale_a(x) + self.ch_scale_b(self.layers(x))
+        return x + self.layers(x)
+
+
+class FourierAttention(nn.Module):
+    def __init__(self, width, dim=(-2, -3)):
+        super().__init__()
+        self.norm = PixelNorm()
+        # self.proj_in = ComplexConv2d(
+        #     width,
+        #     width,
+        #     kernel_size=1,
+        #     padding=0,
+        #     bias=False,
+        # )
+        self.fft = FourierTransform(dim=dim)
+        # self.proj_out = ComplexConv2d(
+        #     width,
+        #     width,
+        #     kernel_size=1,
+        #     padding=0,
+        #     bias=False,
+        # )
+
+    def forward(self, x: Tensor) -> Tensor:
+        x = self.norm(x)
+        # x = self.proj_in(x)
+        x = self.fft(x)
+        # x = self.proj_out(x)
+        return x

@@ -4,14 +4,11 @@ from torch import Tensor
 from .layers import (
     ComplexAmplitude,
     ComplexLinear,
-    FourierTransform,
+    FourierAttention,
     MLP,
     ComplexPool,
     ComplexProjection,
-    LayerNorm,
-    PixelNorm,
-    WeightedResidual,
-    ComplexPositionEncoding2D,
+    Residual,
     ComplexDropout,
 )
 
@@ -22,18 +19,16 @@ class Spectracles(nn.Module):
         input_channels,
         num_classes,
         blocks,
-        mlp_depth,
-        mlp_width,
+        width,
     ):
         super().__init__()
         self.input_channels = input_channels
         self.num_classes = num_classes
-        self.mlp_width = mlp_width
+        self.width = width
         self.num_layers = blocks
-        self.mlp_depth = mlp_depth
 
         self.in_layers = nn.Sequential(
-            nn.Conv2d(input_channels, mlp_width, kernel_size=1),
+            nn.Conv2d(input_channels, width, kernel_size=1),
             ComplexProjection(),
         )
 
@@ -41,22 +36,19 @@ class Spectracles(nn.Module):
         for _ in range(blocks):
             self.mid_layers.extend(
                 [
-                    WeightedResidual(
+                    Residual(
                         (
-                            LayerNorm(),
-                            FourierTransform(dim=(2,3)),
+                            FourierAttention(width=width),
                             ComplexDropout(0.1),
-                            ComplexPositionEncoding2D(),
-                            MLP(mlp_width, mlp_width, mlp_depth),
-                        ),
-                        mlp_width,
-                    )
+                            MLP(width),
+                        )
+                    ),
                 ]
             )
 
         self.out_layers = nn.Sequential(
             ComplexPool(),
-            ComplexLinear(mlp_width, num_classes),
+            ComplexLinear(width, num_classes),
             ComplexAmplitude(),
         )
 

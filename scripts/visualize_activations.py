@@ -37,11 +37,13 @@ with torch.no_grad():
     model = model.eval()
 
     activations = {}
+
     def get_activation(name):
         def hook(model, input, output):
             activations[name] = torch.norm(output[:, 0], dim=-1).cpu()
+
         return hook
-        
+
     for name, layer in model.mid_layers.named_children():
         layer.register_forward_hook(get_activation(name))
 
@@ -50,7 +52,11 @@ with torch.no_grad():
         root="./spectracles/data", train=False, download=True, transform=tvt.ToTensor()
     )
     test_loader = DataLoader(
-        test, batch_size=config["batch_size"], shuffle=False, drop_last=True, num_workers=4
+        test,
+        batch_size=config["batch_size"],
+        shuffle=False,
+        drop_last=True,
+        num_workers=4,
     )
 
     images, labels = next(iter(test_loader))
@@ -69,7 +75,7 @@ with torch.no_grad():
         activations[key] = value[:4]
 
     # Create a grid of plots
-    fig, axs = plt.subplots(4, args["blocks"]+1, figsize=(12, 8))
+    fig, axs = plt.subplots(4, args["blocks"] + 1, figsize=(12, 8))
 
     # Plot the original images
     for i in range(4):
@@ -80,9 +86,9 @@ with torch.no_grad():
     # Plot the intermediate activations
     for i, (name, value) in enumerate(activations.items()):
         for j in range(4):
-            axs[j, i+1].imshow(torch.log(value[j]).numpy())
-            axs[j, i+1].axis("off")
-            axs[j, i+1].set_title(f"Layer {name}")
+            axs[j, i + 1].imshow(torch.log(value[j]).numpy())
+            axs[j, i + 1].axis("off")
+            axs[j, i + 1].set_title(f"Layer {name}")
 
     plt.tight_layout()
     plt.savefig("spectracles/activations.png")
