@@ -2,14 +2,17 @@ import torch.nn as nn
 from torch import Tensor
 
 from .layers import (
-    ComplexAmplitude,
-    ComplexLinear,
-    FourierAttention,
     MLP,
+    ComplexAmplitude,
+    ComplexDropout,
+    ComplexLinear,
     ComplexPool,
     ComplexProjection,
+    FourierTransform,
+    InverseFourierTransform,
+    PixelNorm,
+    ImageNorm,
     Residual,
-    ComplexDropout,
 )
 
 
@@ -29,6 +32,7 @@ class Spectracles(nn.Module):
 
         self.in_layers = nn.Sequential(
             nn.Conv2d(input_channels, width, kernel_size=1),
+            PixelNorm(),
             ComplexProjection(),
         )
 
@@ -38,8 +42,13 @@ class Spectracles(nn.Module):
                 [
                     Residual(
                         (
-                            FourierAttention(width=width),
-                            ComplexDropout(0.1),
+                            ImageNorm(),
+                            FourierTransform(dim=(1, 2, 3)),
+                            ImageNorm(),
+                            MLP(width),
+                            ImageNorm(),
+                            InverseFourierTransform(dim=(1, 2, 3)),
+                            ImageNorm(),
                             MLP(width),
                         )
                     ),

@@ -11,19 +11,18 @@ from ..src.model import Spectracles
 with torch.no_grad():
 
     DTYPE = torch.float32
-    DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+    DEVICE = "cuda:1" if torch.cuda.is_available() else "cpu"
 
-    epoch = 1
+    epoch = 40
 
     args = dict(
-        blocks=16,
-        mlp_width=32,
-        mlp_depth=3,
+        blocks=3,
+        width=32,
     )
 
     config = dict(
         **args,
-        batch_size=128,
+        batch_size=4,
         lr=1e-3,
         data_augmentation=True,
     )
@@ -40,7 +39,7 @@ with torch.no_grad():
 
     def get_activation(name):
         def hook(model, input, output):
-            activations[name] = torch.norm(output[:, 0], dim=-1).cpu()
+            activations[name] = torch.norm(output[:, :4], dim=-1).cpu()
 
         return hook
 
@@ -67,28 +66,31 @@ with torch.no_grad():
 
     _, predicted = torch.max(predictions, dim=1)
 
-    # Select the first 4 images in the batch
-    images = images[:4]
+    to_plot = {"Original": images.cpu().permute(0, 2, 3, 1).numpy(), **activations}
 
     # Select the activations for the first 4 images in the batch
     for key, value in activations.items():
         activations[key] = value[:4]
 
     # Create a grid of plots
-    fig, axs = plt.subplots(4, args["blocks"] + 1, figsize=(12, 8))
+    fig = plt.figure(figsize=(12, 12))
+    outer_grid = fig.subfigures(4, 4)
 
-    # Plot the original images
-    for i in range(4):
-        axs[i, 0].imshow(images[i].cpu().permute(1, 2, 0).numpy())
-        axs[i, 0].axis("off")
-        axs[i, 0].set_title("Original")
+    for row_idx in range(4):
+        for col_idx, (name, tensor) in enumerate(to_plot.items()):
+            subfig = outer_grid[row_idx][col_idx]
+            if col_idx == 0:
+                ax = subfig.subplots()
+                ax.imshow(tensor[row_idx])
+                ax.axis("off")
+                subfig.suptitle("Original")
+            else:
+                subfig.suptitle(name)
+                inner_grid = subfig.subplots(2, 2)
 
-    # Plot the intermediate activations
-    for i, (name, value) in enumerate(activations.items()):
-        for j in range(4):
-            axs[j, i + 1].imshow(torch.log(value[j]).numpy())
-            axs[j, i + 1].axis("off")
-            axs[j, i + 1].set_title(f"Layer {name}")
+                # Plot the intermediate activations
+                for channel_idx, ax in enumerate(inner_grid.flat):
+                    ax.imshow(torch.log(tensor[row_idx, channel_idx]).numpy())
+                    ax.axis("off")
 
-    plt.tight_layout()
     plt.savefig("spectracles/activations.png")

@@ -31,7 +31,7 @@ DTYPE = torch.float32
 
 args = dict(
     blocks=6,
-    width=32,
+    width=48,
 )
 
 config = dict(

@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 from torch import Tensor
-from torch.fft import fft2, fftn
+from torch.fft import fftn, ifftn
 
 
 # Slightly modified from https://github.com/mehdihosseinimoghadam/Complex-Neural-Networks/blob/main/complex_neural_net.py
@@ -82,7 +82,18 @@ class PixelNorm(nn.Module):
         x: Tensor,
     ) -> Tensor:
         x = (x - x.mean(dim=1, keepdim=True)) / (x.std(dim=1, keepdim=True) + 1e-6)
-        return
+        return x
+
+
+class ImageNorm(nn.Module):
+    def forward(
+        self,
+        x: Tensor,
+    ) -> Tensor:
+        x = (x - x.mean(dim=(1, 2, 3), keepdim=True)) / (
+            x.std(dim=(1, 2, 3), keepdim=True) + 1e-6
+        )
+        return x
 
 
 class ComplexProjection(nn.Module):
@@ -106,6 +117,23 @@ class FourierTransform(nn.Module):
             x = torch.view_as_complex(x.contiguous())
 
         x = fftn(x, dim=self.dim, norm="ortho")
+
+        x = torch.view_as_real(x)  # B, C, H, W, 2
+
+        return x
+
+
+class InverseFourierTransform(nn.Module):
+    def __init__(self, dim: int):
+        super().__init__()
+        self.dim = dim
+
+    @torch.compiler.disable()
+    def forward(self, x: Tensor) -> Tensor:
+        if not torch.is_complex(x):
+            x = torch.view_as_complex(x.contiguous())
+
+        x = ifftn(x, dim=self.dim, norm="ortho")
 
         x = torch.view_as_real(x)  # B, C, H, W, 2
 
@@ -176,7 +204,6 @@ class MLP(nn.Module):
         super().__init__()
 
         self.layers = nn.Sequential(
-            PixelNorm(),
             ComplexPositionEncoding2D(),
             ComplexConv2d(width, width, kernel_size=1, padding=0),
             ComplexActivation(nn.GELU()),
@@ -200,31 +227,3 @@ class Residual(nn.Module):
     def forward(self, x: Tensor) -> Tensor:
 
         return x + self.layers(x)
-
-
-class FourierAttention(nn.Module):
-    def __init__(self, width, dim=(-2, -3)):
-        super().__init__()
-        self.norm = PixelNorm()
-        # self.proj_in = ComplexConv2d(
-        #     width,
-        #     width,
-        #     kernel_size=1,
-        #     padding=0,
-        #     bias=False,
-        # )
-        self.fft = FourierTransform(dim=dim)
-        # self.proj_out = ComplexConv2d(
-        #     width,
-        #     width,
-        #     kernel_size=1,
-        #     padding=0,
-        #     bias=False,
-        # )
-
-    def forward(self, x: Tensor) -> Tensor:
-        x = self.norm(x)
-        # x = self.proj_in(x)
-        x = self.fft(x)
-        # x = self.proj_out(x)
-        return x
