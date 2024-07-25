@@ -43,9 +43,7 @@ class Spectracles(nn.Module):
         x = image_norm(x)
         x = torch.stack([x, torch.zeros_like(x)], dim=-1)  # make "complex"
 
-        # Dual parallel residual streams
         pixel_residual = x
-        # freq_residual = torch.zeros_like(x)
 
         # Bounce back and forth between pixel and frequency spaces
         for freq_layer, pixel_layer in zip(self.freq_layers, self.pixel_layers):
@@ -56,12 +54,7 @@ class Spectracles(nn.Module):
             x = torch.fft.fftn(x, dim=(1, 2, 3), norm="ortho")
             x = torch.view_as_real(x)  # B, C, H, W, 2
 
-            x = image_norm(x)
-
             x = freq_layer(x)
-
-            # x = x + freq_residual
-            # freq_residual = x
 
             x = image_norm(x)
 
@@ -69,16 +62,13 @@ class Spectracles(nn.Module):
             x = torch.fft.ifftn(x, dim=(1, 2, 3), norm="ortho")
             x = torch.view_as_real(x)  # B, C, H, W, 2
 
-            x = image_norm(x)
-
             x = pixel_layer(x)
             x = x + pixel_residual
 
             pixel_residual = x
 
         # Average all pixels and make final prediction
-        x = image_norm(x)
-        x = x.mean(dim=(-2, -3))
+        x = x.mean(dim=(2, 3))
         x = self.out_proj(x)
         x = torch.norm(x, dim=-1)
 
