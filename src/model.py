@@ -47,7 +47,6 @@ class Spectracles(nn.Module):
                             ImageNorm(),
                             MLP(width),
                             ImageNorm(),
-                            PixelDropout(0.1),
                             InverseFourierTransform(dim=(1, 2, 3)),
                             ImageNorm(),
                             MLP(width),

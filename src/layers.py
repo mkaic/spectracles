@@ -11,16 +11,22 @@ class ComplexLinear(nn.Module):
         self.in_channels = in_channels
         self.out_channels = out_channels
 
-        self.real_linear = nn.Linear(self.in_channels, self.out_channels, **kwargs)
-        self.imag_linear = nn.Linear(self.in_channels, self.out_channels, **kwargs)
+        self.real_linear = nn.Linear(
+            self.in_channels, self.out_channels, bias=False, **kwargs
+        )
+        self.imag_linear = nn.Linear(
+            self.in_channels, self.out_channels, bias=False, **kwargs
+        )
+        self.real_bias = nn.Parameter(torch.zeros(1, self.out_channels))
+        self.imag_bias = nn.Parameter(torch.zeros(1, self.out_channels))
 
     def forward(self, x: Tensor):
 
         x_real = x[..., 0]
         x_imag = x[..., 1]
 
-        real = self.real_linear(x_real) - self.imag_linear(x_imag)
-        imag = self.imag_linear(x_real) + self.real_linear(x_imag)
+        real = self.real_linear(x_real) - self.imag_linear(x_imag) + self.real_bias
+        imag = self.imag_linear(x_real) + self.real_linear(x_imag) + self.imag_bias
 
         out = torch.stack([real, imag], -1)
 
@@ -33,8 +39,14 @@ class ComplexConv2d(nn.Module):
         self.in_channels = in_channels
         self.out_channels = out_channels
 
-        self.real_conv = nn.Conv2d(self.in_channels, self.out_channels, **kwargs)
-        self.imag_conv = nn.Conv2d(self.in_channels, self.out_channels, **kwargs)
+        self.real_conv = nn.Conv2d(
+            self.in_channels, self.out_channels, bias=False, **kwargs
+        )
+        self.imag_conv = nn.Conv2d(
+            self.in_channels, self.out_channels, bias=False, **kwargs
+        )
+        self.real_bias = nn.Parameter(torch.zeros(1, self.out_channels, 1, 1))
+        self.imag_bias = nn.Parameter(torch.zeros(1, self.out_channels, 1, 1))
 
     def forward(self, x: Tensor):
 
@@ -42,9 +54,9 @@ class ComplexConv2d(nn.Module):
         x_imag = x[..., 1]
 
         # real * real = real, imag * image = -real
-        out_real = self.real_conv(x_real) - self.imag_conv(x_imag)
+        out_real = self.real_conv(x_real) - self.imag_conv(x_imag) + self.real_bias
         # real * imag = imag, imag * real = imag
-        out_imag = self.imag_conv(x_real) + self.real_conv(x_imag)
+        out_imag = self.imag_conv(x_real) + self.real_conv(x_imag) + self.imag_bias
 
         out = torch.stack([out_real, out_imag], -1)
 
