@@ -1,7 +1,6 @@
 import torch
 import torch.nn as nn
 from torch import Tensor
-from torch.fft import fftn, ifftn
 
 
 # Slightly modified from https://github.com/mehdihosseinimoghadam/Complex-Neural-Networks/blob/main/complex_neural_net.py
@@ -85,71 +84,10 @@ class ComplexActivation(nn.Module):
         )
 
 
-class PixelNorm(nn.Module):
-    def __init__(self):
-        super().__init__()
-
-    def forward(
-        self,
-        x: Tensor,
-    ) -> Tensor:
-        x = (x - x.mean(dim=1, keepdim=True)) / (x.std(dim=1, keepdim=True) + 1e-6)
-        return x
-
-
-class ImageNorm(nn.Module):
-    def forward(
-        self,
-        x: Tensor,
-    ) -> Tensor:
-        x = (x - x.mean(dim=(1, 2, 3), keepdim=True)) / (
-            x.std(dim=(1, 2, 3), keepdim=True) + 1e-6
-        )
-        return x
-
-
-class ComplexProjection(nn.Module):
-    def forward(self, x: Tensor) -> Tensor:
-        return torch.stack([x, torch.zeros_like(x)], dim=-1)
-
-
-class ComplexPool(nn.Module):
-    def forward(self, x: Tensor) -> Tensor:
-        return x.mean(dim=(-2, -3))
-
-
-class FourierTransform(nn.Module):
-    def __init__(self, dim: int):
-        super().__init__()
-        self.dim = dim
-
-    @torch.compiler.disable()
-    def forward(self, x: Tensor) -> Tensor:
-        if not torch.is_complex(x):
-            x = torch.view_as_complex(x.contiguous())
-
-        x = fftn(x, dim=self.dim, norm="ortho")
-
-        x = torch.view_as_real(x)  # B, C, H, W, 2
-
-        return x
-
-
-class InverseFourierTransform(nn.Module):
-    def __init__(self, dim: int):
-        super().__init__()
-        self.dim = dim
-
-    @torch.compiler.disable()
-    def forward(self, x: Tensor) -> Tensor:
-        if not torch.is_complex(x):
-            x = torch.view_as_complex(x.contiguous())
-
-        x = ifftn(x, dim=self.dim, norm="ortho")
-
-        x = torch.view_as_real(x)  # B, C, H, W, 2
-
-        return x
+def image_norm(x: Tensor) -> Tensor:
+    return (x - x.mean(dim=(1, 2, 3), keepdim=True)) / (
+        x.std(dim=(1, 2, 3), keepdim=True) + 1e-6
+    )
 
 
 class ComplexPositionEncoding2D(nn.Module):
@@ -220,18 +158,3 @@ class MLP(nn.Module):
 
     def forward(self, x: Tensor) -> Tensor:
         return self.layers(x)
-
-
-class ComplexAmplitude(nn.Module):
-    def forward(self, x: Tensor) -> Tensor:
-        return torch.norm(x, dim=-1)
-
-
-class Residual(nn.Module):
-    def __init__(self, layers):
-        super().__init__()
-        self.layers = nn.Sequential(*layers)
-
-    def forward(self, x: Tensor) -> Tensor:
-
-        return x + self.layers(x)
