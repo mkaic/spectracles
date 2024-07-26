@@ -6,7 +6,6 @@ import torch
 import torch.nn as nn
 import torchvision.transforms as tvt
 from torch.optim import AdamW
-from torch.optim.lr_scheduler import StepLR
 from torch.utils.data import DataLoader
 from torchvision.datasets import CIFAR100, CIFAR10
 from tqdm import tqdm
@@ -30,8 +29,8 @@ DEVICE = f"cuda:{gpu}" if torch.cuda.is_available() else "cpu"
 DTYPE = torch.float32
 
 args = dict(
-    blocks=8,
-    width=64,
+    blocks=6,
+    width=38,
 )
 
 config = dict(
@@ -51,7 +50,7 @@ if not Path("spectracles/weights").exists():
 
 loss_function = nn.CrossEntropyLoss()
 
-model = Spectracles(num_classes=10, input_channels=3, **args)
+model = Spectracles(num_classes=100, input_channels=3, **args)
 model = model.to(DEVICE)
 model = model.to(DTYPE)
 
@@ -89,10 +88,10 @@ train_transforms = (
 )
 
 # Load the MNIST dataset
-train = CIFAR10(
+train = CIFAR100(
     root="./spectracles/data", train=True, download=True, transform=train_transforms
 )
-test = CIFAR10(
+test = CIFAR100(
     root="./spectracles/data", train=False, download=True, transform=tvt.ToTensor()
 )
 
@@ -105,8 +104,6 @@ test_loader = DataLoader(
 
 # Train the model
 optimizer = AdamW(model.parameters(), lr=config["lr"])
-
-scheduler = StepLR(optimizer, step_size=20, gamma=0.5)
 
 train_accuracy = 0
 test_accuracy = 0
@@ -142,7 +139,6 @@ for epoch in range(EPOCHS):
             f"Epoch {epoch} | Train Loss: {loss.item():.4f} | Train Err: {1 - train_accuracy:.2%} | Test Err: {1 - test_accuracy:.2%}"
         )
 
-    scheduler.step()
     train_accuracy = correct / total
 
     model.eval()
@@ -173,6 +169,5 @@ for epoch in range(EPOCHS):
             "train_loss": torch.tensor(losses).mean(),
             "train_accuracy": train_accuracy,
             "test_accuracy": test_accuracy,
-            "lr": scheduler.get_last_lr()[0],
         }
     )
