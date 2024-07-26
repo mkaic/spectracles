@@ -26,6 +26,8 @@ class Spectracles(nn.Module):
 
         self.proj_in = nn.Conv2d(input_channels, width, kernel_size=1, bias=False)
 
+        self.pixel_dropout = PixelDropout(p=1.0)
+
         self.freq_layers = nn.ModuleList()
         self.pixel_layers = nn.ModuleList()
         for _ in range(blocks):
@@ -53,6 +55,8 @@ class Spectracles(nn.Module):
             x = torch.view_as_complex(x.contiguous())
             x = torch.fft.fftn(x, dim=(1, 2, 3), norm="ortho")
             x = torch.view_as_real(x)  # B, C, H, W, 2
+
+            x = self.pixel_dropout(x)
 
             x = freq_layer(x)
 

@@ -68,10 +68,10 @@ train_transforms = (
     tvt.Compose(
         [
             tvt.RandomAffine(
-                degrees=5,
-                translate=(0.1, 0.1),
-                scale=(0.9, 1.1),
-                shear=5,
+                degrees=15,
+                translate=(0.2, 0.2),
+                scale=(0.75, 1.25),
+                shear=10,
             ),
             tvt.ColorJitter(
                 brightness=0.1,
@@ -79,6 +79,8 @@ train_transforms = (
                 saturation=0.1,
                 hue=0.1,
             ),
+            tvt.RandomHorizontalFlip(),
+            tvt.RandomVerticalFlip(),
             tvt.ToTensor(),
         ]
     )

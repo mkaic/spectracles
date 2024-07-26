@@ -135,7 +135,9 @@ class PixelDropout(nn.Module):
         if not self.training:
             return x
         else:
-            mask = torch.rand_like(x[..., 0]) > self.p
+            b, c, h, w, _ = x.shape
+            thresholds = torch.rand(b, 1, 1, 1, device=x.device) * self.p
+            mask = torch.rand_like(x[..., 0]) > thresholds
             mask = mask.unsqueeze(-1).expand_as(x)
 
             return x * mask
