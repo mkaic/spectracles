@@ -18,8 +18,7 @@ class ComplexLinear(nn.Module):
         nn.init.uniform_(real_weights, -bound, bound)
         nn.init.uniform_(imag_weights, -bound, bound)
 
-        self.weights = torch.stack([real_weights, imag_weights], dim=-1)
-        self.weights = torch.view_as_complex(self.weights)
+        self.weights = torch.complex(real_weights, imag_weights)
         self.weights = nn.Parameter(self.weights)
 
         if bias:
@@ -28,8 +27,7 @@ class ComplexLinear(nn.Module):
             nn.init.uniform_(real_bias, -bound, bound)
             nn.init.uniform_(imag_bias, -bound, bound)
 
-            self.biases = torch.stack([real_bias, imag_bias], dim=-1)
-            self.biases = torch.view_as_complex(self.biases)
+            self.biases = torch.complex(real_bias, imag_bias)
             self.biases = nn.Parameter(self.biases)
         else:
             self.register_parameter("biases", None)
@@ -52,7 +50,7 @@ class ComplexActivation(nn.Module):
         real = self.activation(x.real)
         imag = self.activation(x.imag)
 
-        x = torch.view_as_complex(torch.stack([real, imag], dim=-1))
+        x = torch.complex(real, imag)
 
         return x
 
@@ -103,9 +101,7 @@ class RoPE(nn.Module):
                 pos = positions[..., pe_axis] * (1 / (10000 ** (freq / num_freqs)))
                 cos = torch.cos(pos)
                 sin = torch.sin(pos)
-                complex_view = torch.view_as_complex(
-                    torch.stack([cos, sin], dim=-1)
-                )  # B, H, W
+                complex_view = torch.complex(cos, sin) # B, H, W
                 freq_bands.append(complex_view)
 
         positions = torch.stack(freq_bands, dim=-1)  # B, H, W, C
