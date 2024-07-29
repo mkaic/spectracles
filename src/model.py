@@ -6,7 +6,9 @@ from .layers import (
     ComplexMLP,
     ComplexLinear,
     RealMLP,
+    RoPE,
     complex_norm,
+    real_norm,
 )
 
 
@@ -24,13 +26,15 @@ class Spectracles(nn.Module):
         self.width = width
         self.num_layers = blocks
 
-        self.proj_in = nn.Linear(input_channels, width)
+        self.rope = RoPE()
 
-        self.freq_layers = nn.ModuleList()
-        self.pixel_layers = nn.ModuleList()
+        self.proj_in = nn.Linear(input_channels, width * 2)
+
+        self.freq_mlps = nn.ModuleList()
+        self.pixel_mlps = nn.ModuleList()
         for _ in range(blocks):
-            self.freq_layers.append(ComplexMLP(width))
-            self.pixel_layers.append(ComplexMLP(width))
+            self.freq_mlps.append(ComplexMLP(width))
+            self.pixel_mlps.append(ComplexMLP(width))
 
         self.out_proj = ComplexLinear(width, num_classes)
 
@@ -41,26 +45,27 @@ class Spectracles(nn.Module):
 
         x = torch.movedim(x, 1, -1)  # B, C, H, W -> B, H, W, C
         x = self.proj_in(x)  # increase channel count
-        x = torch.view_as_complex(
-            torch.stack([x, torch.zeros_like(x)], dim=-1)
-        )  # B, H, W, C -> B, H, W, C
+        b, h, w, c = x.shape
+        x = x.view(b, h, w, c // 2, 2)
+        x = torch.view_as_complex(x)
         x = complex_norm(x, dim=(1, 2, 3))
 
         # Bounce back and forth between pixel and frequency spaces
-        for freq_layer, pixel_layer in zip(self.freq_layers, self.pixel_layers):
+        for freq_mlp, pixel_mlp in zip(self.freq_mlps, self.pixel_mlps):
 
             residual = x
 
             x = complex_norm(x, dim=(1, 2, 3))
-
             x = torch.fft.fftn(x, dim=(2, 3), norm="ortho")
 
-            x = freq_layer(x)
+            x = self.rope(x)
+            x = freq_mlp(x)
             x = complex_norm(x, dim=(1, 2, 3))
 
             x = torch.fft.ifftn(x, dim=(2, 3), norm="ortho")
 
-            x = pixel_layer(x)
+            x = self.rope(x)
+            x = pixel_mlp(x)
             x = x + residual
 
         # Average all pixels and make final prediction

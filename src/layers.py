@@ -58,14 +58,17 @@ class ComplexActivation(nn.Module):
 
 
 def complex_norm(x: Tensor, dim: tuple) -> Tensor:
-    real = (x.real - torch.mean(x.real, dim=dim, keepdim=True)) / (
-        torch.std(x.real, dim=dim, keepdim=True) + 1e-6
-    )
-    imag = (x.imag - torch.mean(x.imag, dim=dim, keepdim=True)) / (
-        torch.std(x.imag, dim=dim, keepdim=True) + 1e-6
-    )
+    x = x - torch.mean(x, dim=dim, keepdim=True)
 
-    x = torch.view_as_complex(torch.stack([real, imag], dim=-1))
+    magnitudes = torch.abs(x)
+    mean_magnitude = torch.mean(magnitudes, dim=dim, keepdim=True)
+    magnitudes = magnitudes - mean_magnitude
+    magnitudes = magnitudes / (
+        torch.std(magnitudes, dim=dim, keepdim=True) * 3 + 1e-6
+    )  # std 1/3
+    magnitudes = magnitudes + 1  # mean 1
+
+    x = x / (torch.abs(x) + 1e-6) * magnitudes
 
     return x
 
@@ -116,7 +119,7 @@ class RoPE(nn.Module):
         if not torch.is_complex(x):
             x = torch.view_as_real(x)
             x = x.view(b, h, w, c)
-        
+
         return x
 
 
@@ -128,14 +131,12 @@ class ComplexMLP(nn.Module):
 
         super().__init__()
 
-        self.pe = RoPE()
         self.linear_1 = ComplexLinear(width, width)
         self.activation = ComplexActivation(nn.GELU())
         self.linear_2 = ComplexLinear(width, width)
 
     def forward(self, x: Tensor) -> Tensor:
 
-        x = self.pe(x)
         x = self.linear_1(x)
         x = self.activation(x)
         x = self.linear_2(x)
