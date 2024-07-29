@@ -10,6 +10,8 @@ from torch.utils.data import DataLoader
 from torchvision.datasets import CIFAR100, CIFAR10
 from tqdm import tqdm
 
+torch.autograd.set_detect_anomaly(True)
+
 import wandb
 
 from ..src.model import Spectracles
@@ -26,11 +28,10 @@ name = args.name
 gpu = args.gpu
 
 DEVICE = f"cuda:{gpu}" if torch.cuda.is_available() else "cpu"
-DTYPE = torch.float32
 
 args = dict(
-    blocks=6,
-    width=38,
+    blocks=4,
+    width=32,
 )
 
 config = dict(
@@ -50,13 +51,18 @@ if not Path("spectracles/weights").exists():
 
 loss_function = nn.CrossEntropyLoss()
 
-model = Spectracles(num_classes=100, input_channels=3, **args)
+model = Spectracles(num_classes=10, input_channels=3, **args)
 model = model.to(DEVICE)
-model = model.to(DTYPE)
 
 print(model)
 
-num_params = sum(p.numel() for p in model.parameters())
+num_params = 0
+for p in model.parameters():
+    if torch.is_complex(p):
+        num_params += p.numel() * 2
+    else:
+        num_params += p.numel()
+
 print(f"{num_params:,} trainable parameters")
 
 config["num_params"] = num_params
@@ -88,10 +94,10 @@ train_transforms = (
 )
 
 # Load the MNIST dataset
-train = CIFAR100(
+train = CIFAR10(
     root="./spectracles/data", train=True, download=True, transform=train_transforms
 )
-test = CIFAR100(
+test = CIFAR10(
     root="./spectracles/data", train=False, download=True, transform=tvt.ToTensor()
 )
 
@@ -118,11 +124,11 @@ for epoch in range(EPOCHS):
         optimizer.zero_grad()
 
         images, labels = images.to(DEVICE), labels.to(DEVICE)
-        images, labels = images.to(DTYPE), labels.to(torch.long)
+        images, labels = images.to(torch.float32), labels.to(torch.long)
 
         predictions = model(images)
 
-        _, predicted = torch.max(predictions, dim=1)
+        _, predicted = torch.max(predictions, dim=-1)
 
         if step > len(train_loader) * 0.9:
             total += labels.shape[0]
@@ -154,7 +160,7 @@ for epoch in range(EPOCHS):
             labels: torch.Tensor
 
             images, labels = images.to(DEVICE), labels.to(DEVICE)
-            images, labels = images.to(DTYPE), labels.to(torch.long)
+            images, labels = images.to(torch.float32), labels.to(torch.long)
 
             predictions = model(images)
             _, predicted = torch.max(predictions, dim=1)

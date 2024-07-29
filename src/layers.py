@@ -1,65 +1,42 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from torch import Tensor
+import math
 
 
-# Slightly modified from https://github.com/mehdihosseinimoghadam/Complex-Neural-Networks/blob/main/complex_neural_net.py
 class ComplexLinear(nn.Module):
-    def __init__(self, in_channels, out_channels, **kwargs):
+    def __init__(self, in_features: int, out_features: int, bias: bool = True):
         super().__init__()
-        self.in_channels = in_channels
-        self.out_channels = out_channels
+        self.in_features = in_features
+        self.out_features = out_features
 
-        self.real_linear = nn.Linear(
-            self.in_channels, self.out_channels, bias=False, **kwargs
-        )
-        self.imag_linear = nn.Linear(
-            self.in_channels, self.out_channels, bias=False, **kwargs
-        )
-        self.real_bias = nn.Parameter(torch.zeros(1, self.out_channels))
-        self.imag_bias = nn.Parameter(torch.zeros(1, self.out_channels))
+        bound = math.sqrt(1 / self.in_features)
+
+        real_weights = torch.empty((out_features, in_features))
+        imag_weights = torch.empty((out_features, in_features))
+        nn.init.uniform_(real_weights, -bound, bound)
+        nn.init.uniform_(imag_weights, -bound, bound)
+
+        self.weights = torch.stack([real_weights, imag_weights], dim=-1)
+        self.weights = torch.view_as_complex(self.weights)
+        self.weights = nn.Parameter(self.weights)
+
+        if bias:
+            real_bias = torch.empty(out_features)
+            imag_bias = torch.empty(out_features)
+            nn.init.uniform_(real_bias, -bound, bound)
+            nn.init.uniform_(imag_bias, -bound, bound)
+
+            self.biases = torch.stack([real_bias, imag_bias], dim=-1)
+            self.biases = torch.view_as_complex(self.biases)
+            self.biases = nn.Parameter(self.biases)
+        else:
+            self.register_parameter("biases", None)
 
     def forward(self, x: Tensor):
-
-        x_real = x[..., 0]
-        x_imag = x[..., 1]
-
-        real = self.real_linear(x_real) - self.imag_linear(x_imag) + self.real_bias
-        imag = self.imag_linear(x_real) + self.real_linear(x_imag) + self.imag_bias
-
-        out = torch.stack([real, imag], -1)
-
-        return out
-
-
-class ComplexConv2d(nn.Module):
-    def __init__(self, in_channels, out_channels, **kwargs):
-        super().__init__()
-        self.in_channels = in_channels
-        self.out_channels = out_channels
-
-        self.real_conv = nn.Conv2d(
-            self.in_channels, self.out_channels, bias=False, **kwargs
-        )
-        self.imag_conv = nn.Conv2d(
-            self.in_channels, self.out_channels, bias=False, **kwargs
-        )
-        self.real_bias = nn.Parameter(torch.zeros(1, self.out_channels, 1, 1))
-        self.imag_bias = nn.Parameter(torch.zeros(1, self.out_channels, 1, 1))
-
-    def forward(self, x: Tensor):
-
-        x_real = x[..., 0]
-        x_imag = x[..., 1]
-
-        # real * real = real, imag * image = -real
-        out_real = self.real_conv(x_real) - self.imag_conv(x_imag) + self.real_bias
-        # real * imag = imag, imag * real = imag
-        out_imag = self.imag_conv(x_real) + self.real_conv(x_imag) + self.imag_bias
-
-        out = torch.stack([out_real, out_imag], -1)
-
-        return out
+        x = F.linear(x, self.weights, self.biases)
+        return x
 
 
 class ComplexActivation(nn.Module):
@@ -72,78 +49,78 @@ class ComplexActivation(nn.Module):
         x: Tensor,
     ) -> Tensor:
 
-        x_real = x[..., 0]
-        x_imag = x[..., 1]
+        real = self.activation(x.real)
+        imag = self.activation(x.imag)
 
-        return torch.stack(
-            [
-                self.activation(x_real),
-                self.activation(x_imag),
-            ],
-            dim=-1,
-        )
+        x = torch.view_as_complex(torch.stack([real, imag], dim=-1))
+
+        return x
 
 
-def image_norm(x: Tensor) -> Tensor:
-    return (x - x.mean(dim=(1, 2, 3), keepdim=True)) / (
-        x.std(dim=(1, 2, 3), keepdim=True) + 1e-6
+def complex_norm(x: Tensor, dim: tuple) -> Tensor:
+    real = (x.real - torch.mean(x.real, dim=dim, keepdim=True)) / (
+        torch.std(x.real, dim=dim, keepdim=True) + 1e-6
+    )
+    imag = (x.imag - torch.mean(x.imag, dim=dim, keepdim=True)) / (
+        torch.std(x.imag, dim=dim, keepdim=True) + 1e-6
+    )
+
+    x = torch.view_as_complex(torch.stack([real, imag], dim=-1))
+
+    return x
+
+
+def real_norm(x: Tensor, dim: tuple) -> Tensor:
+    return (x - torch.mean(x, dim=dim, keepdim=True)) / (
+        torch.std(x, dim=dim, keepdim=True) + 1e-6
     )
 
 
-class ComplexPositionEncoding2D(nn.Module):
+class RoPE(nn.Module):
     def forward(self, x: Tensor) -> Tensor:
-        b, c, h, w, _ = x.shape
+        b, h, w, c = x.shape
 
-        positions = (
-            torch.stack(
-                torch.meshgrid(
-                    *[
-                        torch.arange(i, dtype=torch.float32, device=x.device)
-                        for i in (h, w)
-                    ],
-                    indexing="ij"
-                ),
-                dim=-1,
-            )
-            .expand(b, h, w, 2)
-            .permute(0, 3, 1, 2)  # B, 2, H, W
-        )
+        positions = torch.stack(
+            torch.meshgrid(
+                *[
+                    torch.arange(i, dtype=torch.float32, device=x.device)
+                    for i in (h, w)
+                ],
+                indexing="ij"
+            ),
+            dim=-1,
+        ).expand(b, h, w, 2)
 
         freq_bands = []
 
-        num_freqs = c // 2
+        num_freqs = c // 2 if torch.is_complex(x) else c // 4
 
         for freq in range(1, num_freqs + 1):
-            for dim in range(2):
-                pos = positions[:, dim] * (1 / (10000 ** (freq / num_freqs)))
+            for pe_axis in range(2):
+                pos = positions[..., pe_axis] * (1 / (10000 ** (freq / num_freqs)))
                 cos = torch.cos(pos)
                 sin = torch.sin(pos)
-                complex_view = torch.stack([cos, sin], dim=-1)  # B, H, W, 2
+                complex_view = torch.view_as_complex(
+                    torch.stack([cos, sin], dim=-1)
+                )  # B, H, W
                 freq_bands.append(complex_view)
 
-        positions = torch.stack(freq_bands, dim=1)  # B, C, H, W, 2
+        positions = torch.stack(freq_bands, dim=-1)  # B, H, W, C
 
-        return x * positions
+        if not torch.is_complex(x):
+            x = x.view(b, h, w, c // 2, 2)
+            x = torch.view_as_complex(x)
 
+        x = x * positions
 
-class PixelDropout(nn.Module):
-    def __init__(self, p: float):
-        super().__init__()
-        self.p = p
-
-    def forward(self, x: Tensor) -> Tensor:
-        if not self.training:
-            return x
-        else:
-            b, c, h, w, _ = x.shape
-            thresholds = torch.rand(b, 1, 1, 1, device=x.device) * self.p
-            mask = torch.rand_like(x[..., 0]) > thresholds
-            mask = mask.unsqueeze(-1).expand_as(x)
-
-            return x * mask
+        if not torch.is_complex(x):
+            x = torch.view_as_real(x)
+            x = x.view(b, h, w, c)
+        
+        return x
 
 
-class MLP(nn.Module):
+class ComplexMLP(nn.Module):
     def __init__(
         self,
         width: int,
@@ -151,14 +128,37 @@ class MLP(nn.Module):
 
         super().__init__()
 
-        self.layers = nn.Sequential(
-            ComplexPositionEncoding2D(),
-            ComplexConv2d(width, width, kernel_size=1, padding=0),
-            ComplexActivation(nn.GELU()),
-            ComplexConv2d(width, width, kernel_size=1, padding=0),
-            ComplexActivation(nn.GELU()),
-            ComplexConv2d(width, width, kernel_size=1, padding=0),
-        )
+        self.pe = RoPE()
+        self.linear_1 = ComplexLinear(width, width)
+        self.activation = ComplexActivation(nn.GELU())
+        self.linear_2 = ComplexLinear(width, width)
 
     def forward(self, x: Tensor) -> Tensor:
-        return self.layers(x)
+
+        x = self.pe(x)
+        x = self.linear_1(x)
+        x = self.activation(x)
+        x = self.linear_2(x)
+
+        return x
+
+
+class RealMLP(nn.Module):
+    def __init__(
+        self,
+        width: int,
+    ):
+
+        super().__init__()
+
+        self.linear_1 = nn.Linear(width, width, kernel_size=1, padding=0)
+        self.activation = nn.GELU()
+        self.linear_2 = nn.Linear(width, width, kernel_size=1, padding=0)
+
+    def forward(self, x: Tensor) -> Tensor:
+
+        x = self.linear_1(x)
+        x = self.activation(x)
+        x = self.linear_2(x)
+
+        return x
