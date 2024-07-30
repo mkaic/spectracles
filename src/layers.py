@@ -108,25 +108,31 @@ def RoPE(x: Tensor) -> Tensor:
     return x
 
 
-class ComplexMLP(nn.Module):
+class PostFFTBlock(nn.Module):
     def __init__(
         self,
         width: int,
     ):
 
         super().__init__()
-        self.activation = ComplexActivation(nn.GELU())
+
+        self.proj_in = ComplexLinear(width, width, bias=True)
+        
         self.linear_1 = ComplexLinear(width, width, bias=True)
+        self.activation = ComplexActivation(nn.GELU())
         self.linear_2 = ComplexLinear(width, width, bias=True)
-        self.linear_3 = ComplexLinear(width, width, bias=True)
 
     def forward(self, x: Tensor) -> Tensor:
+
+        x = self.proj_in(x)
+
+        x = complex_norm(x, dim=(1, 2, 3))
+        x = RoPE(x)
 
         x = self.linear_1(x)
         x = self.activation(x)
         x = self.linear_2(x)
-        x = self.activation(x)
-        x = self.linear_3(x)
+
         return x
 
 

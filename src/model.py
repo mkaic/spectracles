@@ -3,7 +3,7 @@ from torch import Tensor
 import torch
 
 from .layers import (
-    ComplexMLP,
+    PostFFTBlock,
     ComplexLinear,
     RealMLP,
     RoPE,
@@ -28,15 +28,11 @@ class Spectracles(nn.Module):
 
         self.proj_in = nn.Linear(input_channels, width, bias=False)
 
-        self.freq_layers_a = nn.ModuleList()
-        self.freq_layers_b = nn.ModuleList()
-        self.pixel_layers_a = nn.ModuleList()
-        self.pixel_layers_b = nn.ModuleList()
+        self.freq_layers = nn.ModuleList()
+        self.pixel_layers = nn.ModuleList()
         for _ in range(blocks):
-            self.freq_layers_a.append(ComplexLinear(width, width))
-            self.freq_layers_b.append(ComplexMLP(width))
-            self.pixel_layers_a.append(ComplexLinear(width, width))
-            self.pixel_layers_b.append(ComplexMLP(width))
+            self.freq_layers.append(PostFFTBlock(width))
+            self.pixel_layers.append(PostFFTBlock(width))
 
         self.out_proj = ComplexLinear(width, num_classes, bias=True)
 
@@ -56,17 +52,11 @@ class Spectracles(nn.Module):
 
             x = torch.fft.fftn(x, dim=(2, 3), norm="ortho")
 
-            x = self.freq_layers_a[i](x)
-            x = complex_norm(x, dim=(1, 2, 3))
-            x = RoPE(x)
-            x = self.freq_layers_b[i](x)
+            x = self.freq_layers[i](x)
 
             x = torch.fft.ifftn(x, dim=(2, 3), norm="ortho")
 
-            x = self.pixel_layers_a[i](x)
-            x = complex_norm(x, dim=(1, 2, 3))
-            x = RoPE(x)
-            x = self.pixel_layers_b[i](x)
+            x = self.pixel_layers[i](x)
 
             x = x + residual
 

@@ -30,7 +30,7 @@ DEVICE = f"cuda:{args.gpu}" if torch.cuda.is_available() else "cpu"
 
 model_args = dict(
     blocks=4,
-    width=22,
+    width=26,
 )
 
 config = dict(
