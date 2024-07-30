@@ -23,19 +23,18 @@ warnings.filterwarnings(
 parser = ArgumentParser()
 parser.add_argument("-n", "--name", type=str, default=None)
 parser.add_argument("-g", "--gpu", type=int, default=0)
+parser.add_argument("-p", "--print_params", action="store_true", default=False)
 args = parser.parse_args()
-name = args.name
-gpu = args.gpu
 
-DEVICE = f"cuda:{gpu}" if torch.cuda.is_available() else "cpu"
+DEVICE = f"cuda:{args.gpu}" if torch.cuda.is_available() else "cpu"
 
-args = dict(
+model_args = dict(
     blocks=4,
-    width=32,
+    width=22,
 )
 
 config = dict(
-    **args,
+    **model_args,
     batch_size=128,
     lr=1e-3,
     data_augmentation=False,
@@ -44,17 +43,17 @@ config = dict(
 EPOCHS = 100
 SAVE = True
 
-print("\n", args)
+print(model_args)
 
 if not Path("spectracles/weights").exists():
     Path("spectracles/weights").mkdir(parents=True)
 
 loss_function = nn.CrossEntropyLoss()
 
-model = Spectracles(num_classes=10, input_channels=3, **args)
+model = Spectracles(num_classes=10, input_channels=3, **model_args)
 model = model.to(DEVICE)
 
-print(model)
+# print(model)
 
 num_params = 0
 for p in model.parameters():
@@ -65,115 +64,130 @@ for p in model.parameters():
 
 print(f"{num_params:,} trainable parameters")
 
-config["num_params"] = num_params
+if not args.print_params:
 
-wandb.init(project="spectracles", config=config, name=name)
+    config["num_params"] = num_params
 
-train_transforms = (
-    tvt.Compose(
-        [
-            tvt.RandomAffine(
-                degrees=15,
-                translate=(0.2, 0.2),
-                scale=(0.75, 1.25),
-                shear=10,
-            ),
-            tvt.ColorJitter(
-                brightness=0.1,
-                contrast=0.1,
-                saturation=0.1,
-                hue=0.1,
-            ),
-            tvt.RandomHorizontalFlip(),
-            tvt.RandomVerticalFlip(),
-            tvt.ToTensor(),
-        ]
-    )
-    if config["data_augmentation"]
-    else tvt.ToTensor()
-)
+    wandb.init(project="spectracles", config=config, name=args.name)
+    include_fn = lambda path: path.endswith(".py")
+    wandb.run.log_code("./spectracles", include_fn=include_fn)
 
-# Load the MNIST dataset
-train = CIFAR10(
-    root="./spectracles/data", train=True, download=True, transform=train_transforms
-)
-test = CIFAR10(
-    root="./spectracles/data", train=False, download=True, transform=tvt.ToTensor()
-)
-
-train_loader = DataLoader(
-    train, batch_size=config["batch_size"], shuffle=True, drop_last=True, num_workers=4
-)
-test_loader = DataLoader(
-    test, batch_size=config["batch_size"], shuffle=False, drop_last=True, num_workers=4
-)
-
-# Train the model
-optimizer = AdamW(model.parameters(), lr=config["lr"])
-
-train_accuracy = 0
-test_accuracy = 0
-for epoch in range(EPOCHS):
-    model.train()
-    pbar = tqdm(train_loader, leave=False)
-
-    total = 0
-    correct = 0
-    losses = []
-    for step, (images, labels) in enumerate(pbar):
-        optimizer.zero_grad()
-
-        images, labels = images.to(DEVICE), labels.to(DEVICE)
-        images, labels = images.to(torch.float32), labels.to(torch.long)
-
-        predictions = model(images)
-
-        _, predicted = torch.max(predictions, dim=-1)
-
-        if step > len(train_loader) * 0.9:
-            total += labels.shape[0]
-            correct += (predicted == labels).sum().item()
-
-        loss = loss_function(predictions, labels)
-
-        losses.append(loss.item())
-        loss.backward()
-
-        optimizer.step()
-
-        pbar.set_description(
-            f"Epoch {epoch} | Train Loss: {loss.item():.4f} | Train Err: {1 - train_accuracy:.2%} | Test Err: {1 - test_accuracy:.2%}"
+    train_transforms = (
+        tvt.Compose(
+            [
+                tvt.RandomAffine(
+                    degrees=15,
+                    translate=(0.2, 0.2),
+                    scale=(0.75, 1.25),
+                    shear=10,
+                ),
+                tvt.ColorJitter(
+                    brightness=0.1,
+                    contrast=0.1,
+                    saturation=0.1,
+                    hue=0.1,
+                ),
+                tvt.RandomHorizontalFlip(),
+                tvt.RandomVerticalFlip(),
+                tvt.ToTensor(),
+            ]
         )
+        if config["data_augmentation"]
+        else tvt.ToTensor()
+    )
 
-    train_accuracy = correct / total
+    # Load the MNIST dataset
+    train = CIFAR10(
+        root="./spectracles/data", train=True, download=True, transform=train_transforms
+    )
+    test = CIFAR10(
+        root="./spectracles/data", train=False, download=True, transform=tvt.ToTensor()
+    )
 
-    model.eval()
-    if SAVE:
-        torch.save(model.state_dict(), f"spectracles/weights/{epoch:03d}.ckpt")
+    train_loader = DataLoader(
+        train,
+        batch_size=config["batch_size"],
+        shuffle=True,
+        drop_last=True,
+        num_workers=4,
+    )
+    test_loader = DataLoader(
+        test,
+        batch_size=config["batch_size"],
+        shuffle=False,
+        drop_last=True,
+        num_workers=4,
+    )
 
-    total = 0
-    correct = 0
-    with torch.no_grad():
-        for images, labels in tqdm(test_loader, leave=False):
+    # Train the model
+    optimizer = AdamW(model.parameters(), lr=config["lr"])
 
-            images: torch.Tensor
-            labels: torch.Tensor
+    train_accuracy = 0
+    test_accuracy = 0
+    for epoch in range(EPOCHS):
+        model.train()
+        pbar = tqdm(train_loader, leave=False)
+
+        total = 0
+        correct = 0
+        losses = []
+        for step, (images, labels) in enumerate(pbar):
+            optimizer.zero_grad()
 
             images, labels = images.to(DEVICE), labels.to(DEVICE)
             images, labels = images.to(torch.float32), labels.to(torch.long)
 
             predictions = model(images)
-            _, predicted = torch.max(predictions, dim=1)
 
-            total += labels.shape[0]
-            correct += (predicted == labels).sum().item()
+            _, predicted = torch.max(predictions, dim=-1)
 
-    test_accuracy = correct / total
+            if step > len(train_loader) * 0.9:
+                total += labels.shape[0]
+                correct += (predicted == labels).sum().item()
 
-    wandb.log(
-        {
-            "train_loss": torch.tensor(losses).mean(),
-            "train_accuracy": train_accuracy,
-            "test_accuracy": test_accuracy,
-        }
-    )
+            loss = loss_function(predictions, labels)
+
+            losses.append(loss.item())
+            loss.backward()
+
+            optimizer.step()
+
+            pbar.set_description(
+                f"Epoch {epoch} | Train Loss: {loss.item():.4f} | Train Err: {1 - train_accuracy:.2%} | Test Err: {1 - test_accuracy:.2%}"
+            )
+
+        train_accuracy = correct / total
+
+        # print("/n")
+        # for norm in model.complex_norms:
+        #     print(norm.mean_mag.item(), norm.std_mag.item())
+        # model.eval()
+        if SAVE:
+            torch.save(model.state_dict(), f"spectracles/weights/{epoch:03d}.ckpt")
+
+        total = 0
+        correct = 0
+        with torch.no_grad():
+            for images, labels in tqdm(test_loader, leave=False):
+
+                images: torch.Tensor
+                labels: torch.Tensor
+
+                images, labels = images.to(DEVICE), labels.to(DEVICE)
+                images, labels = images.to(torch.float32), labels.to(torch.long)
+
+                predictions = model(images)
+                _, predicted = torch.max(predictions, dim=1)
+
+                total += labels.shape[0]
+                correct += (predicted == labels).sum().item()
+
+        test_accuracy = correct / total
+
+        wandb.log(
+            {
+                "train_loss": torch.tensor(losses).mean(),
+                "train_accuracy": train_accuracy,
+                "test_accuracy": test_accuracy,
+            }
+        )

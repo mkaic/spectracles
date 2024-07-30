@@ -26,17 +26,19 @@ class Spectracles(nn.Module):
         self.width = width
         self.num_layers = blocks
 
-        self.rope = RoPE()
+        self.proj_in = nn.Linear(input_channels, width, bias=False)
 
-        self.proj_in = nn.Linear(input_channels, width * 2)
-
-        self.freq_mlps = nn.ModuleList()
-        self.pixel_mlps = nn.ModuleList()
+        self.freq_layers_a = nn.ModuleList()
+        self.freq_layers_b = nn.ModuleList()
+        self.pixel_layers_a = nn.ModuleList()
+        self.pixel_layers_b = nn.ModuleList()
         for _ in range(blocks):
-            self.freq_mlps.append(ComplexMLP(width))
-            self.pixel_mlps.append(ComplexMLP(width))
+            self.freq_layers_a.append(ComplexLinear(width, width))
+            self.freq_layers_b.append(ComplexMLP(width))
+            self.pixel_layers_a.append(ComplexLinear(width, width))
+            self.pixel_layers_b.append(ComplexMLP(width))
 
-        self.out_proj = ComplexLinear(width, num_classes)
+        self.out_proj = ComplexLinear(width, num_classes, bias=True)
 
     def forward(
         self,
@@ -45,31 +47,31 @@ class Spectracles(nn.Module):
 
         x = torch.movedim(x, 1, -1)  # B, C, H, W -> B, H, W, C
         x = self.proj_in(x)  # increase channel count
-        b, h, w, c = x.shape
-        x = x.view(b, h, w, c // 2, 2)
-        x = torch.view_as_complex(x)
-        x = complex_norm(x, dim=(1, 2, 3))
+        x = torch.complex(x, torch.zeros_like(x))
 
         # Bounce back and forth between pixel and frequency spaces
-        for freq_mlp, pixel_mlp in zip(self.freq_mlps, self.pixel_mlps):
+        for i in range(self.num_layers):
 
             residual = x
 
-            x = complex_norm(x, dim=(1, 2, 3))
             x = torch.fft.fftn(x, dim=(2, 3), norm="ortho")
 
-            x = self.rope(x)
-            x = freq_mlp(x)
+            x = self.freq_layers_a[i](x)
             x = complex_norm(x, dim=(1, 2, 3))
+            x = RoPE(x)
+            x = self.freq_layers_b[i](x)
 
             x = torch.fft.ifftn(x, dim=(2, 3), norm="ortho")
 
-            x = self.rope(x)
-            x = pixel_mlp(x)
+            x = self.pixel_layers_a[i](x)
+            x = complex_norm(x, dim=(1, 2, 3))
+            x = RoPE(x)
+            x = self.pixel_layers_b[i](x)
+
             x = x + residual
 
         # Average all pixels and make final prediction
-        x = x.mean(dim=(2, 3))
+        x = x.mean(dim=(1, 2))
         x = self.out_proj(x)
         x = torch.abs(x)
 

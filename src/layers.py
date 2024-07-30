@@ -22,10 +22,10 @@ class ComplexLinear(nn.Module):
         self.weights = nn.Parameter(self.weights)
 
         if bias:
-            real_bias = torch.empty(out_features)
-            imag_bias = torch.empty(out_features)
-            nn.init.uniform_(real_bias, -bound, bound)
-            nn.init.uniform_(imag_bias, -bound, bound)
+            real_bias = torch.zeros(out_features)
+            imag_bias = torch.zeros(out_features)
+            # nn.init.uniform_(real_bias, -bound, bound)
+            # nn.init.uniform_(imag_bias, -bound, bound)
 
             self.biases = torch.complex(real_bias, imag_bias)
             self.biases = nn.Parameter(self.biases)
@@ -61,14 +61,6 @@ def complex_norm(x: Tensor, dim: tuple) -> Tensor:
     imag = x.imag / (x.imag.std(dim=dim, keepdim=True) + 1e-6)
     x = torch.complex(real, imag)
 
-    magnitudes = torch.abs(x)
-    new_magnitudes = magnitudes / (
-        torch.std(magnitudes, dim=dim, keepdim=True) + 1e-6
-    )  # std 1/3
-
-    x = x / (magnitudes + 1e-6)
-    x = x * new_magnitudes
-
     return x
 
 
@@ -78,46 +70,42 @@ def real_norm(x: Tensor, dim: tuple) -> Tensor:
     )
 
 
-class RoPE(nn.Module):
-    def forward(self, x: Tensor) -> Tensor:
-        b, h, w, c = x.shape
+def RoPE(x: Tensor) -> Tensor:
+    b, h, w, c = x.shape
 
-        positions = torch.stack(
-            torch.meshgrid(
-                *[
-                    torch.arange(i, dtype=torch.float32, device=x.device)
-                    for i in (h, w)
-                ],
-                indexing="ij"
-            ),
-            dim=-1,
-        ).expand(b, h, w, 2)
+    positions = torch.stack(
+        torch.meshgrid(
+            *[torch.arange(i, dtype=torch.float32, device=x.device) for i in (h, w)],
+            indexing="ij"
+        ),
+        dim=-1,
+    ).expand(b, h, w, 2)
 
-        freq_bands = []
+    freq_bands = []
 
-        num_freqs = c // 2 if torch.is_complex(x) else c // 4
+    num_freqs = c // 2 if torch.is_complex(x) else c // 4
 
-        for freq in range(1, num_freqs + 1):
-            for pe_axis in range(2):
-                pos = positions[..., pe_axis] * (1 / (10000 ** (freq / num_freqs)))
-                cos = torch.cos(pos)
-                sin = torch.sin(pos)
-                complex_view = torch.complex(cos, sin)  # B, H, W
-                freq_bands.append(complex_view)
+    for freq in range(1, num_freqs + 1):
+        for pe_axis in range(2):
+            pos = positions[..., pe_axis] * (1 / (10000 ** (freq / num_freqs)))
+            cos = torch.cos(pos)
+            sin = torch.sin(pos)
+            complex_view = torch.complex(cos, sin)  # B, H, W
+            freq_bands.append(complex_view)
 
-        positions = torch.stack(freq_bands, dim=-1)  # B, H, W, C
+    positions = torch.stack(freq_bands, dim=-1)  # B, H, W, C
 
-        if not torch.is_complex(x):
-            x = x.view(b, h, w, c // 2, 2)
-            x = torch.view_as_complex(x)
+    if not torch.is_complex(x):
+        x = x.view(b, h, w, c // 2, 2)
+        x = torch.view_as_complex(x)
 
-        x = x * positions
+    x = x * positions
 
-        if not torch.is_complex(x):
-            x = torch.view_as_real(x)
-            x = x.view(b, h, w, c)
+    if not torch.is_complex(x):
+        x = torch.view_as_real(x)
+        x = x.view(b, h, w, c)
 
-        return x
+    return x
 
 
 class ComplexMLP(nn.Module):
@@ -127,17 +115,18 @@ class ComplexMLP(nn.Module):
     ):
 
         super().__init__()
-
-        self.linear_1 = ComplexLinear(width, width)
         self.activation = ComplexActivation(nn.GELU())
-        self.linear_2 = ComplexLinear(width, width)
+        self.linear_1 = ComplexLinear(width, width, bias=True)
+        self.linear_2 = ComplexLinear(width, width, bias=True)
+        self.linear_3 = ComplexLinear(width, width, bias=True)
 
     def forward(self, x: Tensor) -> Tensor:
 
         x = self.linear_1(x)
         x = self.activation(x)
         x = self.linear_2(x)
-
+        x = self.activation(x)
+        x = self.linear_3(x)
         return x
 
 
@@ -149,9 +138,10 @@ class RealMLP(nn.Module):
 
         super().__init__()
 
-        self.linear_1 = nn.Linear(width, width, kernel_size=1, padding=0)
         self.activation = nn.GELU()
-        self.linear_2 = nn.Linear(width, width, kernel_size=1, padding=0)
+
+        self.linear_1 = nn.Linear(width, width)
+        self.linear_2 = nn.Linear(width, width)
 
     def forward(self, x: Tensor) -> Tensor:
 
