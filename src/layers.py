@@ -57,16 +57,17 @@ class ComplexActivation(nn.Module):
 
 def complex_norm(x: Tensor, dim: tuple) -> Tensor:
     x = x - torch.mean(x, dim=dim, keepdim=True)
+    real = x.real / (x.real.std(dim=dim, keepdim=True) + 1e-6)
+    imag = x.imag / (x.imag.std(dim=dim, keepdim=True) + 1e-6)
+    x = torch.complex(real, imag)
 
     magnitudes = torch.abs(x)
-    mean_magnitude = torch.mean(magnitudes, dim=dim, keepdim=True)
-    magnitudes = magnitudes - mean_magnitude
-    magnitudes = magnitudes / (
-        torch.std(magnitudes, dim=dim, keepdim=True) * 3 + 1e-6
+    new_magnitudes = magnitudes / (
+        torch.std(magnitudes, dim=dim, keepdim=True) + 1e-6
     )  # std 1/3
-    magnitudes = magnitudes + 1  # mean 1
 
-    x = x / (torch.abs(x) + 1e-6) * magnitudes
+    x = x / (magnitudes + 1e-6)
+    x = x * new_magnitudes
 
     return x
 
@@ -101,7 +102,7 @@ class RoPE(nn.Module):
                 pos = positions[..., pe_axis] * (1 / (10000 ** (freq / num_freqs)))
                 cos = torch.cos(pos)
                 sin = torch.sin(pos)
-                complex_view = torch.complex(cos, sin) # B, H, W
+                complex_view = torch.complex(cos, sin)  # B, H, W
                 freq_bands.append(complex_view)
 
         positions = torch.stack(freq_bands, dim=-1)  # B, H, W, C
