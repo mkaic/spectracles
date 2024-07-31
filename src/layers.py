@@ -71,6 +71,9 @@ def real_norm(x: Tensor, dim: tuple) -> Tensor:
 
 
 def RoPE(x: Tensor) -> Tensor:
+
+    is_complex = torch.is_complex(x)
+
     b, h, w, c = x.shape
 
     positions = torch.stack(
@@ -83,7 +86,7 @@ def RoPE(x: Tensor) -> Tensor:
 
     freq_bands = []
 
-    num_freqs = c // 2 if torch.is_complex(x) else c // 4
+    num_freqs = c // 2 if is_complex else c // 4
 
     for freq in range(1, num_freqs + 1):
         for pe_axis in range(2):
@@ -95,13 +98,13 @@ def RoPE(x: Tensor) -> Tensor:
 
     positions = torch.stack(freq_bands, dim=-1)  # B, H, W, C
 
-    if not torch.is_complex(x):
+    if not is_complex:
         x = x.view(b, h, w, c // 2, 2)
         x = torch.view_as_complex(x)
 
     x = x * positions
 
-    if not torch.is_complex(x):
+    if not is_complex:
         x = torch.view_as_real(x)
         x = x.view(b, h, w, c)
 
@@ -137,7 +140,7 @@ class PostFFTBlock(nn.Module):
         return x
 
 
-class RealMLP(nn.Module):
+class PostIFFTBlock(nn.Module):
     def __init__(
         self,
         width: int,
@@ -147,10 +150,17 @@ class RealMLP(nn.Module):
 
         self.activation = nn.GELU()
 
-        self.linear_1 = nn.Linear(width, width)
-        self.linear_2 = nn.Linear(width, width)
+        self.proj_in = nn.Linear(width, width, bias=True)
+
+        self.linear_1 = nn.Linear(width, width, bias=True)
+        self.linear_2 = nn.Linear(width, width, bias=True)
 
     def forward(self, x: Tensor) -> Tensor:
+
+        x = self.proj_in(x)
+
+        x = real_norm(x, dim=-1)
+        x = RoPE(x)
 
         x = self.linear_1(x)
         x = self.activation(x)
