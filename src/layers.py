@@ -54,20 +54,24 @@ class ComplexActivation(nn.Module):
 
         return x
 
+
 def recenter(x: Tensor, dim: tuple) -> Tensor:
     return x - torch.mean(x, dim=dim, keepdim=True)
 
-def magnitude_exponent(x: Tensor, pow=1/2) -> Tensor:
+
+def magnitude_exponent(x: Tensor, pow=1 / 2) -> Tensor:
 
     mag = torch.abs(x) + 1e-6
     x = x / mag * torch.pow(mag, pow)
 
     return x
 
+
 class MagnitudeExponent(nn.Module):
-    def __init__(self, pow=0.0):
+    def __init__(self, pow=1.0):
         super().__init__()
         self.pow_offset = nn.Parameter(torch.tensor(float(pow - 1)))
+
     def forward(self, x: Tensor) -> Tensor:
         return magnitude_exponent(x, 1 + self.pow_offset)
 
@@ -117,8 +121,7 @@ class ComplexMLP(nn.Module):
         self.layers = nn.Sequential()
         for _ in range(depth):
             self.layers.append(ComplexLinear(width, width, bias=True))
-            self.layers.append(MagnitudeExponent(pow=1.0))
-
+            self.layers.append(MagnitudeExponent())
 
     def forward(self, x: Tensor) -> Tensor:
         x = self.layers(x)

@@ -31,7 +31,7 @@ class Spectracles(nn.Module):
         self.pe_dim = pe_dim
 
         self.proj_in = nn.Linear(input_channels, width, bias=False)
-        self.norm_in = MagnitudeExponent(pow=1.0)
+        self.mag_exp_in = MagnitudeExponent()
 
         self.post_fft_projs = nn.ModuleList()
         self.freq_mag_exps: list[MagnitudeExponent] = nn.ModuleList()
@@ -41,14 +41,14 @@ class Spectracles(nn.Module):
         self.post_ifft_mlps = nn.ModuleList()
         for _ in range(blocks):
             self.post_fft_projs.append(ComplexLinear(width, width, bias=True))
-            self.freq_mag_exps.append(MagnitudeExponent(pow=0.5))
+            self.freq_mag_exps.append(MagnitudeExponent())
             self.post_fft_mlps.append(ComplexMLP(width, depth=mlp_depth))
             self.post_ifft_projs.append(ComplexLinear(width, width, bias=True))
-            self.pixel_mag_exps.append(MagnitudeExponent(pow=0.5))
+            self.pixel_mag_exps.append(MagnitudeExponent())
             self.post_ifft_mlps.append(ComplexMLP(width, depth=mlp_depth))
 
         self.out_proj = ComplexLinear(width, num_classes, bias=True)
-        self.norm_out = MagnitudeExponent(pow=1.0)
+        self.out_mag_exp = MagnitudeExponent()
 
         self.register_buffer("pos_enc", None)
 
@@ -59,14 +59,15 @@ class Spectracles(nn.Module):
 
         x = torch.movedim(x, 1, -1)  # B, C, H, W -> B, H, W, C
         x = self.proj_in(x)  # increase channel count
-        x = recenter(x, dim=(1,2,3))
-        x = self.norm_in(x)
+        x = recenter(x, dim=(1, 2, 3))
         x = torch.complex(x, torch.zeros_like(x))
 
         if self.pos_enc is None:
             self.pos_enc = get_rotary_position_vectors(
                 shape=x.shape[1:3],
-                num_frequencies=self.pe_dim if self.pe_dim is not None else x.shape[-1] // 2,
+                num_frequencies=(
+                    self.pe_dim if self.pe_dim is not None else x.shape[-1] // 2
+                ),
                 device=x.device,
             )
 
@@ -78,9 +79,9 @@ class Spectracles(nn.Module):
             x = torch.fft.fftn(x, dim=(2, 3), norm="ortho")
 
             x = self.post_fft_projs[i](x)
-            x = recenter(x, dim=(1,2,3))
+            x = recenter(x, dim=(1, 2, 3))
             x = self.freq_mag_exps[i](x)
-            
+
             x = x * self.pos_enc
 
             x = self.post_fft_mlps[i](x)
@@ -88,7 +89,7 @@ class Spectracles(nn.Module):
             x = torch.fft.ifftn(x, dim=(2, 3), norm="ortho")
 
             x = self.post_ifft_projs[i](x)
-            x = recenter(x, dim=(1,2,3))
+            x = recenter(x, dim=(1, 2, 3))
             x = self.pixel_mag_exps[i](x)
 
             x = x * self.pos_enc
@@ -101,7 +102,7 @@ class Spectracles(nn.Module):
         x = x.mean(dim=(1, 2))
         x = self.out_proj(x)
         x = recenter(x, dim=1)
-        x = self.norm_out(x)
+        x = self.out_mag_exp(x)
         x = torch.abs(x)
 
         return x

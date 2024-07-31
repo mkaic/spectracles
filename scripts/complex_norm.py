@@ -11,11 +11,11 @@ plt.scatter(skewed[:, 0], skewed[:, 1], c="r", s=2)
 
 c_skewed = torch.view_as_complex(skewed)
 
-c_normed = (c_skewed - c_skewed.mean(dim=0, keepdim=True))
+c_normed = c_skewed - c_skewed.mean(dim=0, keepdim=True)
 mag = torch.abs(c_normed) + 1e-6
-c_normed_2 = c_normed / mag * torch.pow(mag, 1/2)
-c_normed_3 = c_normed / mag * torch.pow(mag, 1/3)
-c_normed_4 = c_normed / mag * torch.pow(mag, 1/4)
+c_normed_2 = c_normed / mag * torch.pow(mag, 1 / 2)
+c_normed_3 = c_normed / mag * torch.pow(mag, 1 / 3)
+c_normed_4 = c_normed / mag * torch.pow(mag, 1 / 4)
 
 # c_normed = (c_skewed - c_skewed.mean(dim=0, keepdim=True)) / c_skewed.std(
 #     dim=0, keepdim=True
