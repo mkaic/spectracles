@@ -59,7 +59,16 @@ def recenter(x: Tensor, dim: tuple) -> Tensor:
     return x - torch.mean(x, dim=dim, keepdim=True)
 
 
-def magnitude_exponent(x: Tensor, pow=1 / 2) -> Tensor:
+class Recenter(nn.Module):
+    def __init__(self, dim):
+        super().__init__()
+        self.dim = dim
+
+    def forward(self, x: Tensor) -> Tensor:
+        return recenter(x, self.dim)
+
+
+def magnitude_exponent(x: Tensor, pow) -> Tensor:
 
     mag = torch.abs(x) + 1e-6
     x = x / mag * torch.pow(mag, pow)
@@ -68,18 +77,12 @@ def magnitude_exponent(x: Tensor, pow=1 / 2) -> Tensor:
 
 
 class MagnitudeExponent(nn.Module):
-    def __init__(self, pow=1.0):
+    def __init__(self, width, pow=1.0):
         super().__init__()
-        self.pow_offset = nn.Parameter(torch.tensor(float(pow - 1)))
+        self.pow_offset = nn.Parameter(torch.full((width,), float(pow - 1)))
 
     def forward(self, x: Tensor) -> Tensor:
-        return magnitude_exponent(x, 1 + self.pow_offset)
-
-
-def real_norm(x: Tensor, dim: tuple) -> Tensor:
-    return (x - torch.mean(x, dim=dim, keepdim=True)) / (
-        torch.std(x, dim=dim, keepdim=True) + 1e-6
-    )
+        return magnitude_exponent(x, self.pow_offset + 1)
 
 
 def get_rotary_position_vectors(shape, num_frequencies, device):
@@ -121,7 +124,8 @@ class ComplexMLP(nn.Module):
         self.layers = nn.Sequential()
         for _ in range(depth):
             self.layers.append(ComplexLinear(width, width, bias=True))
-            self.layers.append(MagnitudeExponent())
+            # self.layers.append(Recenter(dim=-1))
+            self.layers.append(MagnitudeExponent(width, pow=1.0))
 
     def forward(self, x: Tensor) -> Tensor:
         x = self.layers(x)

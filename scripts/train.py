@@ -162,11 +162,11 @@ if not args.print_params:
         train_accuracy = correct / total
 
         print("\n")
-        print([f"{norm.pow_offset.item() + 1:.2f}" for norm in model.freq_mag_exps])
-        print([f"{norm.pow_offset.item() + 1:.2f}" for norm in model.pixel_mag_exps])
+        print([f"{norm.pow_offset[0].item() + 1:.2f}" for norm in model.freq_mag_exps])
+        print([f"{norm.pow_offset[0].item() + 1:.2f}" for norm in model.pixel_mag_exps])
         print(
             [
-                f"{norm.pow_offset.item() + 1:.2f}"
+                f"{norm.pow_offset[0].item() + 1:.2f}"
                 for norm in [
                     l
                     for l in model.post_fft_mlps[0].layers
@@ -176,7 +176,7 @@ if not args.print_params:
         )
         print(
             [
-                f"{norm.pow_offset.item() + 1:.2f}"
+                f"{norm.pow_offset[0].item() + 1:.2f}"
                 for norm in [
                     l
                     for l in model.post_ifft_mlps[0].layers
@@ -186,7 +186,7 @@ if not args.print_params:
         )
         print(
             [
-                f"{norm.pow_offset.item() + 1:.2f}"
+                f"{norm.pow_offset[0].item() + 1:.2f}"
                 for norm in [
                     l
                     for l in model.post_fft_mlps[-1].layers
@@ -196,7 +196,7 @@ if not args.print_params:
         )
         print(
             [
-                f"{norm.pow_offset.item() + 1:.2f}"
+                f"{norm.pow_offset[0].item() + 1:.2f}"
                 for norm in [
                     l
                     for l in model.post_ifft_mlps[-1].layers
