@@ -28,11 +28,11 @@ class Spectracles(nn.Module):
 
         self.proj_in = nn.Linear(input_channels, width, bias=False)
 
-        self.freq_layers = nn.ModuleList()
-        self.pixel_layers = nn.ModuleList()
+        self.freq_blocks = nn.ModuleList()
+        self.pixel_blocks = nn.ModuleList()
         for _ in range(blocks):
-            self.freq_layers.append(PostFFTBlock(width))
-            self.pixel_layers.append(PostFFTBlock(width))
+            self.freq_blocks.append(PostFFTBlock(width))
+            self.pixel_blocks.append(PostFFTBlock(width))
 
         self.out_proj = ComplexLinear(width, num_classes, bias=True)
 
@@ -52,11 +52,11 @@ class Spectracles(nn.Module):
 
             x = torch.fft.fftn(x, dim=(2, 3), norm="ortho")
 
-            x = self.freq_layers[i](x)
+            x = self.freq_blocks[i](x)
 
             x = torch.fft.ifftn(x, dim=(2, 3), norm="ortho")
 
-            x = self.pixel_layers[i](x)
+            x = self.pixel_blocks[i](x)
 
             x = x + residual
 

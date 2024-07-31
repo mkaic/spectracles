@@ -116,17 +116,18 @@ class PostFFTBlock(nn.Module):
 
         super().__init__()
 
-        self.proj_in = ComplexLinear(width, width, bias=True)
-        
-        self.linear_1 = ComplexLinear(width, width, bias=True)
         self.activation = ComplexActivation(nn.GELU())
+
+        self.proj_in = ComplexLinear(width, width, bias=True)
+
+        self.linear_1 = ComplexLinear(width, width, bias=True)
         self.linear_2 = ComplexLinear(width, width, bias=True)
 
     def forward(self, x: Tensor) -> Tensor:
 
         x = self.proj_in(x)
 
-        x = complex_norm(x, dim=(1, 2, 3))
+        x = complex_norm(x, dim=-1)
         x = RoPE(x)
 
         x = self.linear_1(x)
