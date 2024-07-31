@@ -49,7 +49,6 @@ class Spectracles(nn.Module):
 
         self.out_mag_exp = MagnitudeExponent(width)
         self.out_proj = ComplexLinear(width, num_classes, bias=True)
-        
 
         self.register_buffer("pos_enc", None)
 
@@ -81,7 +80,7 @@ class Spectracles(nn.Module):
             x = torch.fft.fftn(x, dim=(2, 3), norm="ortho")
 
             x = self.post_fft_projs[i](x)
-            x = recenter(x, dim=(1,2,3))
+            x = recenter(x, dim=(1, 2, 3))
             x = self.freq_mag_exps[i](x)
 
             x = x * self.pos_enc
@@ -91,7 +90,7 @@ class Spectracles(nn.Module):
             x = torch.fft.ifftn(x, dim=(2, 3), norm="ortho")
 
             x = self.post_ifft_projs[i](x)
-            x = recenter(x, dim=(1,2,3))
+            x = recenter(x, dim=(1, 2, 3))
             x = self.pixel_mag_exps[i](x)
 
             x = x * self.pos_enc
@@ -101,7 +100,7 @@ class Spectracles(nn.Module):
             x = x + residual
 
         # Average all pixels and make final prediction
-        x = recenter(x, dim=(1,2,3))
+        x = recenter(x, dim=(1, 2, 3))
         x = self.out_mag_exp(x)
         x = x.mean(dim=(1, 2))
         x = self.out_proj(x)

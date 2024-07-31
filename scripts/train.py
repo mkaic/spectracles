@@ -162,48 +162,10 @@ if not args.print_params:
         train_accuracy = correct / total
 
         print("\n")
-        print([f"{norm.pow_offset[0].item() + 1:.2f}" for norm in model.freq_mag_exps])
-        print([f"{norm.pow_offset[0].item() + 1:.2f}" for norm in model.pixel_mag_exps])
-        print(
-            [
-                f"{norm.pow_offset[0].item() + 1:.2f}"
-                for norm in [
-                    l
-                    for l in model.post_fft_mlps[0].layers
-                    if isinstance(l, MagnitudeExponent)
-                ]
-            ]
-        )
-        print(
-            [
-                f"{norm.pow_offset[0].item() + 1:.2f}"
-                for norm in [
-                    l
-                    for l in model.post_ifft_mlps[0].layers
-                    if isinstance(l, MagnitudeExponent)
-                ]
-            ]
-        )
-        print(
-            [
-                f"{norm.pow_offset[0].item() + 1:.2f}"
-                for norm in [
-                    l
-                    for l in model.post_fft_mlps[-1].layers
-                    if isinstance(l, MagnitudeExponent)
-                ]
-            ]
-        )
-        print(
-            [
-                f"{norm.pow_offset[0].item() + 1:.2f}"
-                for norm in [
-                    l
-                    for l in model.post_ifft_mlps[-1].layers
-                    if isinstance(l, MagnitudeExponent)
-                ]
-            ]
-        )
+        print([f"{norm.pow_offset[8].item() + 1:.2f}" for norm in model.freq_mag_exps])
+        print([f"{norm.pow_offset[8].item() + 1:.2f}" for norm in model.pixel_mag_exps])
+        exp_params = [p for name, p in model.named_parameters() if "powers" in name]
+        print([f"{p[8].item():.2f}" for p in exp_params])
 
         model.eval()
         if SAVE:

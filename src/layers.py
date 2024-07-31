@@ -85,6 +85,16 @@ class MagnitudeExponent(nn.Module):
         return magnitude_exponent(x, self.pow_offset + 1)
 
 
+class ComplexExponential(nn.Module):
+    def __init__(self, width):
+        super().__init__()
+        self.width = width
+        self.powers = nn.Parameter(torch.ones((width,), dtype=torch.complex64))
+
+    def forward(self, x: Tensor) -> Tensor:
+        return torch.pow(x, self.powers)
+
+
 def get_rotary_position_vectors(shape, num_frequencies, device):
 
     positions = torch.stack(
@@ -125,7 +135,7 @@ class ComplexMLP(nn.Module):
         for _ in range(depth):
             self.layers.append(ComplexLinear(width, width, bias=True))
             # self.layers.append(Recenter(dim=-1))
-            self.layers.append(MagnitudeExponent(width, pow=1.0))
+            self.layers.append(ComplexExponential(width))
 
     def forward(self, x: Tensor) -> Tensor:
         x = self.layers(x)
