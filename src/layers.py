@@ -54,14 +54,22 @@ class ComplexActivation(nn.Module):
 
         return x
 
+def recenter(x: Tensor, dim: tuple) -> Tensor:
+    return x - torch.mean(x, dim=dim, keepdim=True)
 
-def complex_norm(x: Tensor, dim: tuple) -> Tensor:
-    x = x - torch.mean(x, dim=dim, keepdim=True)
-    real = x.real / (x.real.std(dim=dim, keepdim=True) + 1e-6)
-    imag = x.imag / (x.imag.std(dim=dim, keepdim=True) + 1e-6)
-    x = torch.complex(real, imag)
+def magnitude_exponent(x: Tensor, pow=1/2) -> Tensor:
+
+    mag = torch.abs(x) + 1e-6
+    x = x / mag * torch.pow(mag, pow)
 
     return x
+
+class MagnitudeExponent(nn.Module):
+    def __init__(self, pow=0.0):
+        super().__init__()
+        self.pow_offset = nn.Parameter(torch.tensor(float(pow - 1)))
+    def forward(self, x: Tensor) -> Tensor:
+        return magnitude_exponent(x, 1 + self.pow_offset)
 
 
 def real_norm(x: Tensor, dim: tuple) -> Tensor:
@@ -106,14 +114,11 @@ class ComplexMLP(nn.Module):
 
         super().__init__()
 
-        self.activation = ComplexActivation(nn.GELU())
-
         self.layers = nn.Sequential()
-        for _ in range(depth - 1):
+        for _ in range(depth):
             self.layers.append(ComplexLinear(width, width, bias=True))
-            self.layers.append(self.activation)
+            self.layers.append(MagnitudeExponent(pow=1.0))
 
-        self.layers.append(ComplexLinear(width, width, bias=True))
 
     def forward(self, x: Tensor) -> Tensor:
         x = self.layers(x)

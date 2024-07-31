@@ -15,6 +15,7 @@ torch.autograd.set_detect_anomaly(True)
 import wandb
 
 from ..src.model import Spectracles
+from ..src.layers import MagnitudeExponent
 
 warnings.filterwarnings(
     "ignore", "Torchinductor does not support code generation for complex operators"
@@ -72,6 +73,7 @@ if not args.print_params:
     wandb.init(project="spectracles", config=config, name=args.name)
     include_fn = lambda path: path.endswith(".py")
     wandb.run.log_code("./spectracles", include_fn=include_fn)
+    wandb.watch(model, log="parameters", log_freq=390)
 
     train_transforms = (
         tvt.Compose(
@@ -159,10 +161,15 @@ if not args.print_params:
 
         train_accuracy = correct / total
 
-        # print("/n")
-        # for norm in model.complex_norms:
-        #     print(norm.mean_mag.item(), norm.std_mag.item())
-        # model.eval()
+        # print("\n")
+        # print([f"{norm.pow_offset.item() + 1:.2f}" for norm in model.freq_mag_exps])
+        # print([f"{norm.pow_offset.item() + 1:.2f}" for norm in model.pixel_mag_exps])
+        # print([f"{norm.pow_offset.item() + 1:.2f}" for norm in [l for l in model.post_fft_mlps[0].layers if isinstance(l, MagnitudeExponent)]])
+        # print([f"{norm.pow_offset.item() + 1:.2f}" for norm in [l for l in model.post_ifft_mlps[0].layers if isinstance(l, MagnitudeExponent)]])
+        # print([f"{norm.pow_offset.item() + 1:.2f}" for norm in [l for l in model.post_fft_mlps[-1].layers if isinstance(l, MagnitudeExponent)]])
+        # print([f"{norm.pow_offset.item() + 1:.2f}" for norm in [l for l in model.post_ifft_mlps[-1].layers if isinstance(l, MagnitudeExponent)]])
+
+        model.eval()
         if SAVE:
             torch.save(model.state_dict(), f"spectracles/weights/{epoch:03d}.ckpt")
 
