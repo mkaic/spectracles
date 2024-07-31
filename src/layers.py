@@ -70,100 +70,51 @@ def real_norm(x: Tensor, dim: tuple) -> Tensor:
     )
 
 
-def RoPE(x: Tensor) -> Tensor:
-
-    is_complex = torch.is_complex(x)
-
-    b, h, w, c = x.shape
+def get_rotary_position_vectors(shape, num_frequencies, device):
 
     positions = torch.stack(
         torch.meshgrid(
-            *[torch.arange(i, dtype=torch.float32, device=x.device) for i in (h, w)],
+            *[torch.arange(i, dtype=torch.float32, device=device) for i in shape],
             indexing="ij"
         ),
         dim=-1,
-    ).expand(b, h, w, 2)
+    )
 
     freq_bands = []
 
-    num_freqs = c // 2 if is_complex else c // 4
-
-    for freq in range(1, num_freqs + 1):
+    for freq_idx in range(1, num_frequencies + 1):
         for pe_axis in range(2):
-            pos = positions[..., pe_axis] * (1 / (10000 ** (freq / num_freqs)))
+            pos = positions[..., pe_axis] * (
+                1 / (10000 ** (freq_idx / num_frequencies))
+            )
             cos = torch.cos(pos)
             sin = torch.sin(pos)
-            complex_view = torch.complex(cos, sin)  # B, H, W
+            complex_view = torch.complex(cos, sin)  # H, W
             freq_bands.append(complex_view)
 
-    positions = torch.stack(freq_bands, dim=-1)  # B, H, W, C
+    positions = torch.stack(freq_bands, dim=-1)  # H, W, C
 
-    if not is_complex:
-        x = x.view(b, h, w, c // 2, 2)
-        x = torch.view_as_complex(x)
-
-    x = x * positions
-
-    if not is_complex:
-        x = torch.view_as_real(x)
-        x = x.view(b, h, w, c)
-
-    return x
+    return positions
 
 
-class PostFFTBlock(nn.Module):
+class ComplexMLP(nn.Module):
     def __init__(
         self,
         width: int,
+        depth: int = 2,
     ):
 
         super().__init__()
 
         self.activation = ComplexActivation(nn.GELU())
 
-        self.proj_in = ComplexLinear(width, width, bias=True)
+        self.layers = nn.Sequential()
+        for _ in range(depth - 1):
+            self.layers.append(ComplexLinear(width, width, bias=True))
+            self.layers.append(self.activation)
 
-        self.linear_1 = ComplexLinear(width, width, bias=True)
-        self.linear_2 = ComplexLinear(width, width, bias=True)
-
-    def forward(self, x: Tensor) -> Tensor:
-
-        x = self.proj_in(x)
-
-        x = complex_norm(x, dim=-1)
-        x = RoPE(x)
-
-        x = self.linear_1(x)
-        x = self.activation(x)
-        x = self.linear_2(x)
-
-        return x
-
-
-class PostIFFTBlock(nn.Module):
-    def __init__(
-        self,
-        width: int,
-    ):
-
-        super().__init__()
-
-        self.activation = nn.GELU()
-
-        self.proj_in = nn.Linear(width, width, bias=True)
-
-        self.linear_1 = nn.Linear(width, width, bias=True)
-        self.linear_2 = nn.Linear(width, width, bias=True)
+        self.layers.append(ComplexLinear(width, width, bias=True))
 
     def forward(self, x: Tensor) -> Tensor:
-
-        x = self.proj_in(x)
-
-        x = real_norm(x, dim=-1)
-        x = RoPE(x)
-
-        x = self.linear_1(x)
-        x = self.activation(x)
-        x = self.linear_2(x)
-
+        x = self.layers(x)
         return x
