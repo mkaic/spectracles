@@ -89,10 +89,10 @@ class ComplexExponential(nn.Module):
     def __init__(self, width):
         super().__init__()
         self.width = width
-        self.powers = nn.Parameter(torch.ones((width,), dtype=torch.complex64))
+        self.pow_offset = nn.Parameter(torch.zeros((width,), dtype=torch.complex64))
 
     def forward(self, x: Tensor) -> Tensor:
-        return torch.pow(x, self.powers)
+        return torch.pow(x, self.pow_offset + 1)
 
 
 def get_rotary_position_vectors(shape, num_frequencies, device):
