@@ -33,11 +33,9 @@ class Spectracles(nn.Module):
 
         self.freq_magnorms = nn.ModuleList()
         self.freq_mlps = nn.ModuleList()
-        self.freq_magnorms_b = nn.ModuleList()
 
         self.pixel_magnorms = nn.ModuleList()
         self.pixel_mlps = nn.ModuleList()
-        self.pixel_magnorms_b = nn.ModuleList()
 
         for _ in range(blocks):
             self.freq_magnorms.append(MagExpLin(width, power=0.5))
@@ -45,6 +43,7 @@ class Spectracles(nn.Module):
 
             self.pixel_magnorms.append(MagExpLin(width, power=0.5))
             self.pixel_mlps.append(ComplexMLP(width, width, depth=mlp_depth))
+
         self.out_magnorm = MagExpLin(width, power=1.0)
         self.out_proj = ComplexLinear(width, num_classes, bias=True)
 

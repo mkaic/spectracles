@@ -34,6 +34,7 @@ class ComplexLinear(nn.Module):
         x = F.linear(x, self.weights, self.biases)
         return x
 
+
 class CompAct(nn.Module):
     def __init__(self, activation):
         super().__init__()
