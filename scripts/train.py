@@ -15,7 +15,6 @@ torch.autograd.set_detect_anomaly(True)
 import wandb
 
 from ..src.model import Spectracles
-from ..src.layers import MagExp
 
 warnings.filterwarnings(
     "ignore", "Torchinductor does not support code generation for complex operators"
