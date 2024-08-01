@@ -36,6 +36,7 @@ class ComplexLinear(nn.Module):
         x = F.linear(x, self.weights, self.biases)
         return x
 
+
 class MagLinear(nn.Module):
     def __init__(self, width, bias=True):
         super().__init__()
@@ -48,6 +49,20 @@ class MagLinear(nn.Module):
         x = x * (new_mag / old_mag)
         return x
 
+
+class CustomLeakyReLU(nn.Module):
+    def __init__(self, slope=0.1, threshold=1.0):
+        super().__init__()
+        self.negative_slope = nn.Parameter(torch.tensor(slope))
+        self.threshold = nn.Parameter(torch.tensor(threshold))
+
+    def forward(
+        self,
+        x: Tensor,
+    ) -> Tensor:
+        return torch.where(x > self.threshold, x, self.negative_slope * x)
+
+
 class MagAct(nn.Module):
     def __init__(self, activation):
         super().__init__()
@@ -58,16 +73,16 @@ class MagAct(nn.Module):
         x: Tensor,
     ) -> Tensor:
 
-        mag_positivity = torch.cos((torch.pi / 4) - torch.angle(x))
-        # mag_positivity = (torch.sign(x.real) + torch.sign(x.imag)) / 2
-        # mag_positivity = (mag_positivity + 1) / 2
-        mags = torch.abs(x) + 1e-6
-        signed_scaled_mags = mags * mag_positivity
-        final_mags = self.activation(signed_scaled_mags)
-        x = x * (final_mags / mags)
+        # mag_positivity = torch.cos((torch.pi / 4) - torch.angle(x))
+        old_mags = torch.abs(x) + 1e-6
+        new_mags = self.activation(old_mags)
+        # mag_positivity = (x_normed.real + x_normed.imag) / 2
+        # signed_scaled_mags = old_mags * mag_positivity
+        # new_mags = self.activation(signed_scaled_mags)
+        x = x * (new_mags / old_mags)
 
         return x
-    
+
 
 class CompAct(nn.Module):
     def __init__(self, activation):
@@ -83,7 +98,6 @@ class CompAct(nn.Module):
 
 def recenter(x: Tensor, dim: tuple) -> Tensor:
     return x - torch.mean(x, dim=dim, keepdim=True)
-
 
 
 def magnitude_exponent(x: Tensor, pow) -> Tensor:
@@ -109,12 +123,14 @@ class MagNorm(nn.Module):
         self.magexp = MagExp(width, pow=pow)
         self.maglinear = MagLinear(width, bias=True)
         self.recenter = recenter
+
     def forward(self, x: Tensor) -> Tensor:
         if self.recenter:
-            x = recenter(x, dim=(1,2,3))
+            x = recenter(x, dim=(1, 2, 3))
         x = self.magexp(x)
         x = self.maglinear(x)
         return x
+
 
 class CompExp(nn.Module):
     def __init__(self, width):
@@ -166,7 +182,7 @@ class ComplexMLP(nn.Module):
         for _ in range(depth):
             self.layers.append(ComplexLinear(width, width, bias=True))
             self.layers.append(MagNorm(width, pow=1.0, recenter=False))
-            self.layers.append(MagAct(nn.ReLU()))
+            self.layers.append(CompAct(nn.LeakyReLU(0.1)))
 
     def forward(self, x: Tensor) -> Tensor:
         x = self.layers(x)

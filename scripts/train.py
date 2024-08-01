@@ -162,7 +162,11 @@ if not args.print_params:
         train_accuracy = correct / total
 
         print("\n")
-        exp_params = [p for name, p in model.named_parameters() if "mlp" in name and "pow_offset" in name]
+        exp_params = [
+            p
+            for name, p in model.named_parameters()
+            if "mlp" in name and "pow_offset" in name
+        ]
         print([f"{p[8].item():.2f}" for p in exp_params])
 
         model.eval()
