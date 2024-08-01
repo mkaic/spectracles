@@ -9,12 +9,10 @@ from torch.optim import AdamW
 from torch.utils.data import DataLoader
 from torchvision.datasets import CIFAR100, CIFAR10
 from tqdm import tqdm
-
-torch.autograd.set_detect_anomaly(True)
-
 import wandb
 
 from ..src.model import Spectracles
+
 
 warnings.filterwarnings(
     "ignore", "Torchinductor does not support code generation for complex operators"
@@ -30,9 +28,9 @@ DEVICE = f"cuda:{args.gpu}" if torch.cuda.is_available() else "cpu"
 
 model_args = dict(
     blocks=4,
-    width=30,
+    width=40,
     mlp_depth=2,
-    pe_dim=16,
+    pe_dim=None,
 )
 
 config = dict(
@@ -55,7 +53,8 @@ loss_function = nn.CrossEntropyLoss()
 model = Spectracles(num_classes=10, input_channels=3, **model_args)
 model = model.to(DEVICE)
 
-# print(model)
+if args.print_params:
+    print(model)
 
 num_params = 0
 for p in model.parameters():
@@ -160,14 +159,6 @@ if not args.print_params:
             )
 
         train_accuracy = correct / total
-
-        print("\n")
-        exp_params = [
-            p
-            for name, p in model.named_parameters()
-            if "mlp" in name and "pow_offset" in name
-        ]
-        print([f"{p[8].item():.2f}" for p in exp_params])
 
         model.eval()
         if SAVE:

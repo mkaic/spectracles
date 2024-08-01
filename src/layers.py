@@ -24,8 +24,6 @@ class ComplexLinear(nn.Module):
         if bias:
             real_bias = torch.zeros(out_features)
             imag_bias = torch.zeros(out_features)
-            # nn.init.uniform_(real_bias, -bound, bound)
-            # nn.init.uniform_(imag_bias, -bound, bound)
 
             self.biases = torch.complex(real_bias, imag_bias)
             self.biases = nn.Parameter(self.biases)
@@ -35,28 +33,6 @@ class ComplexLinear(nn.Module):
     def forward(self, x: Tensor):
         x = F.linear(x, self.weights, self.biases)
         return x
-
-
-class MagAct(nn.Module):
-    def __init__(self, activation):
-        super().__init__()
-        self.activation = activation
-
-    def forward(
-        self,
-        x: Tensor,
-    ) -> Tensor:
-
-        # mag_positivity = torch.cos((torch.pi / 4) - torch.angle(x))
-        old_mags = torch.abs(x) + 1e-6
-        new_mags = self.activation(old_mags)
-        # mag_positivity = (x_normed.real + x_normed.imag) / 2
-        # signed_scaled_mags = old_mags * mag_positivity
-        # new_mags = self.activation(signed_scaled_mags)
-        x = x * (new_mags / old_mags)
-
-        return x
-
 
 class CompAct(nn.Module):
     def __init__(self, activation):
@@ -77,6 +53,7 @@ def recenter(x: Tensor, dim: tuple) -> Tensor:
 class MagExpLin(nn.Module):
     def __init__(self, width, power=1.0):
         super().__init__()
+
         self.pow_offset = nn.Parameter(torch.full((width,), float(power - 1)))
         self.mag_weight_offset = nn.Parameter(torch.zeros((width,)))
         self.mag_bias = nn.Parameter(torch.zeros((width,)))
@@ -136,15 +113,15 @@ class ComplexMLP(nn.Module):
 
         super().__init__()
 
-        widths = [width_in] + [width_out] * (depth - 1)
+        widths = [width_in] * (depth - 1) + [width_out]
+        # print(widths)
 
         self.layers = nn.Sequential()
         for dim_in, dim_out in zip(widths[:-1], widths[1:]):
-            self.layers.append(ComplexLinear(dim_in, dim_out, bias=True))
-            self.layers.append(MagExpLin(dim_out, power=1.0))
+            self.layers.append(ComplexLinear(dim_in, dim_out))
             self.layers.append(CompAct(nn.LeakyReLU(0.1)))
 
-        self.layers.append(ComplexLinear(width_out, width_out, bias=True))
+        self.layers.append(ComplexLinear(width_out, width_out))
 
     def forward(self, x: Tensor) -> Tensor:
         x = self.layers(x)

@@ -7,7 +7,6 @@ from .layers import (
     ComplexLinear,
     MagExpLin,
     get_rotary_position_vectors,
-    recenter,
 )
 
 
@@ -30,57 +29,23 @@ class Spectracles(nn.Module):
         self.pe_dim = pe_dim
 
         self.proj_in = nn.Linear(input_channels, width, bias=False)
-        self.mag_exp_in = MagExpLin(width, power=1.0)
+        self.magnorm_in = MagExpLin(width, power=1.0)
 
-        self.post_fft_projs = nn.ModuleList()
-        self.freq_mag_exps: list[MagExpLin] = nn.ModuleList()
-        self.post_fft_mlps = nn.ModuleList()
-        self.post_ifft_projs = nn.ModuleList()
-        self.pixel_mag_exps: list[MagExpLin] = nn.ModuleList()
-        self.post_ifft_mlps = nn.ModuleList()
+        self.freq_magnorms = nn.ModuleList()
+        self.freq_mlps = nn.ModuleList()
+        self.freq_magnorms_b = nn.ModuleList()
+
+        self.pixel_magnorms = nn.ModuleList()
+        self.pixel_mlps = nn.ModuleList()
+        self.pixel_magnorms_b = nn.ModuleList()
+
         for _ in range(blocks):
-            self.post_fft_projs.append(
-                ComplexLinear(
-                    width,
-                    width,
-                    bias=True,
-                )
-            )
-            self.freq_mag_exps.append(
-                MagExpLin(
-                    width,
-                    power=0.5,
-                )
-            )
-            self.post_fft_mlps.append(
-                ComplexMLP(
-                    width + self.pe_dim,
-                    width,
-                    depth=mlp_depth,
-                )
-            )
-            self.post_ifft_projs.append(
-                ComplexLinear(
-                    width,
-                    width,
-                    bias=True,
-                )
-            )
-            self.pixel_mag_exps.append(
-                MagExpLin(
-                    width,
-                    power=0.5,
-                )
-            )
-            self.post_ifft_mlps.append(
-                ComplexMLP(
-                    width + self.pe_dim,
-                    width,
-                    depth=mlp_depth,
-                )
-            )
+            self.freq_magnorms.append(MagExpLin(width, power=0.5))
+            self.freq_mlps.append(ComplexMLP(width, width, depth=mlp_depth))
 
-        self.out_mag_exp = MagExpLin(width, power=1.0)
+            self.pixel_magnorms.append(MagExpLin(width, power=0.5))
+            self.pixel_mlps.append(ComplexMLP(width, width, depth=mlp_depth))
+        self.out_magnorm = MagExpLin(width, power=1.0)
         self.out_proj = ComplexLinear(width, num_classes, bias=True)
 
         self.register_buffer("pos_enc", None)
@@ -95,8 +60,7 @@ class Spectracles(nn.Module):
         x = torch.movedim(x, 1, -1)  # B, C, H, W -> B, H, W, C
         x = self.proj_in(x)  # increase channel count
         x = torch.complex(x, torch.zeros_like(x))
-        x = recenter(x, dim=(1, 2, 3))
-        x = self.mag_exp_in(x)
+        x = self.magnorm_in(x)
 
         if self.pos_enc is None:
             self.pos_enc = get_rotary_position_vectors(
@@ -114,29 +78,22 @@ class Spectracles(nn.Module):
 
             x = torch.fft.fftn(x, dim=(2, 3), norm="ortho")
 
-            x = self.post_fft_projs[i](x)
-            x = recenter(x, dim=(1, 2, 3))
-            x = self.freq_mag_exps[i](x)
+            x = x * self.pos_enc
 
-            x = torch.cat([x, self.pos_enc.expand(b, -1, -1, -1)], dim=-1)
-
-            x = self.post_fft_mlps[i](x)
+            x = self.freq_magnorms[i](x)
+            x = self.freq_mlps[i](x)
 
             x = torch.fft.ifftn(x, dim=(2, 3), norm="ortho")
 
-            x = self.post_ifft_projs[i](x)
-            x = recenter(x, dim=(1, 2, 3))
-            x = self.pixel_mag_exps[i](x)
+            x = x * self.pos_enc
 
-            x = torch.cat([x, self.pos_enc.expand(b, -1, -1, -1)], dim=-1)
-
-            x = self.post_ifft_mlps[i](x)
+            x = self.pixel_magnorms[i](x)
+            x = self.pixel_mlps[i](x)
 
             x = x + residual
 
         # Average all pixels and make final prediction
-        x = recenter(x, dim=(1, 2, 3))
-        x = self.out_mag_exp(x)
+        x = self.out_magnorm(x)
         x = x.mean(dim=(1, 2))
         x = self.out_proj(x)
         x = torch.abs(x)
