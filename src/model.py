@@ -39,12 +39,46 @@ class Spectracles(nn.Module):
         self.pixel_mag_exps: list[MagExpLin] = nn.ModuleList()
         self.post_ifft_mlps = nn.ModuleList()
         for _ in range(blocks):
-            self.post_fft_projs.append(ComplexLinear(width, width, bias=True))
-            self.freq_mag_exps.append(MagExpLin(width, power=0.5))
-            self.post_fft_mlps.append(ComplexMLP(width, depth=mlp_depth))
-            self.post_ifft_projs.append(ComplexLinear(width, width, bias=True))
-            self.pixel_mag_exps.append(MagExpLin(width, power=0.5))
-            self.post_ifft_mlps.append(ComplexMLP(width, depth=mlp_depth))
+            self.post_fft_projs.append(
+                ComplexLinear(
+                    width,
+                    width,
+                    bias=True,
+                )
+            )
+            self.freq_mag_exps.append(
+                MagExpLin(
+                    width,
+                    power=0.5,
+                )
+            )
+            self.post_fft_mlps.append(
+                ComplexMLP(
+                    width + self.pe_dim,
+                    width,
+                    depth=mlp_depth,
+                )
+            )
+            self.post_ifft_projs.append(
+                ComplexLinear(
+                    width,
+                    width,
+                    bias=True,
+                )
+            )
+            self.pixel_mag_exps.append(
+                MagExpLin(
+                    width,
+                    power=0.5,
+                )
+            )
+            self.post_ifft_mlps.append(
+                ComplexMLP(
+                    width + self.pe_dim,
+                    width,
+                    depth=mlp_depth,
+                )
+            )
 
         self.out_mag_exp = MagExpLin(width, power=1.0)
         self.out_proj = ComplexLinear(width, num_classes, bias=True)
@@ -56,6 +90,8 @@ class Spectracles(nn.Module):
         x: Tensor,
     ) -> Tensor:
 
+        b, c, h, w = x.shape
+
         x = torch.movedim(x, 1, -1)  # B, C, H, W -> B, H, W, C
         x = self.proj_in(x)  # increase channel count
         x = torch.complex(x, torch.zeros_like(x))
@@ -66,10 +102,10 @@ class Spectracles(nn.Module):
             self.pos_enc = get_rotary_position_vectors(
                 shape=x.shape[1:3],
                 num_frequencies=(
-                    self.pe_dim if self.pe_dim is not None else x.shape[-1] // 2
+                    self.pe_dim // 2 if self.pe_dim is not None else x.shape[-1] // 2
                 ),
                 device=x.device,
-            )
+            ).unsqueeze(0)
 
         # Bounce back and forth between pixel and frequency spaces
         for i in range(self.num_layers):
@@ -82,7 +118,7 @@ class Spectracles(nn.Module):
             x = recenter(x, dim=(1, 2, 3))
             x = self.freq_mag_exps[i](x)
 
-            x = x * self.pos_enc
+            x = torch.cat([x, self.pos_enc.expand(b, -1, -1, -1)], dim=-1)
 
             x = self.post_fft_mlps[i](x)
 
@@ -92,7 +128,7 @@ class Spectracles(nn.Module):
             x = recenter(x, dim=(1, 2, 3))
             x = self.pixel_mag_exps[i](x)
 
-            x = x * self.pos_enc
+            x = torch.cat([x, self.pos_enc.expand(b, -1, -1, -1)], dim=-1)
 
             x = self.post_ifft_mlps[i](x)
 

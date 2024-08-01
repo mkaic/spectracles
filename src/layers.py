@@ -36,6 +36,7 @@ class ComplexLinear(nn.Module):
         x = F.linear(x, self.weights, self.biases)
         return x
 
+
 class MagAct(nn.Module):
     def __init__(self, activation):
         super().__init__()
@@ -71,7 +72,6 @@ class CompAct(nn.Module):
 
 def recenter(x: Tensor, dim: tuple) -> Tensor:
     return x - torch.mean(x, dim=dim, keepdim=True)
-
 
 
 class MagExpLin(nn.Module):
@@ -129,17 +129,22 @@ def get_rotary_position_vectors(shape, num_frequencies, device):
 class ComplexMLP(nn.Module):
     def __init__(
         self,
-        width: int,
+        width_in: int,
+        width_out: int,
         depth: int = 2,
     ):
 
         super().__init__()
 
+        widths = [width_in] + [width_out] * (depth - 1)
+
         self.layers = nn.Sequential()
-        for _ in range(depth):
-            self.layers.append(ComplexLinear(width, width, bias=True))
-            self.layers.append(MagExpLin(width, power=1.0))
+        for dim_in, dim_out in zip(widths[:-1], widths[1:]):
+            self.layers.append(ComplexLinear(dim_in, dim_out, bias=True))
+            self.layers.append(MagExpLin(dim_out, power=1.0))
             self.layers.append(CompAct(nn.LeakyReLU(0.1)))
+
+        self.layers.append(ComplexLinear(width_out, width_out, bias=True))
 
     def forward(self, x: Tensor) -> Tensor:
         x = self.layers(x)
