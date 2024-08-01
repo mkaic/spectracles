@@ -36,8 +36,19 @@ class ComplexLinear(nn.Module):
         x = F.linear(x, self.weights, self.biases)
         return x
 
+class MagLinear(nn.Module):
+    def __init__(self, width, bias=True):
+        super().__init__()
+        self.mag_weight_offset = nn.Parameter(torch.zeros((width,)))
+        self.mag_bias = nn.Parameter(torch.zeros((width,)))
 
-class ComplexActivation(nn.Module):
+    def forward(self, x: Tensor) -> Tensor:
+        old_mag = torch.abs(x) + 1e-6
+        new_mag = old_mag * (self.mag_weight_offset + 1) + self.mag_bias
+        x = x * (new_mag / old_mag)
+        return x
+
+class MagAct(nn.Module):
     def __init__(self, activation):
         super().__init__()
         self.activation = activation
@@ -47,25 +58,32 @@ class ComplexActivation(nn.Module):
         x: Tensor,
     ) -> Tensor:
 
-        real = self.activation(x.real)
-        imag = self.activation(x.imag)
-
-        x = torch.complex(real, imag)
+        mag_positivity = torch.cos((torch.pi / 4) - torch.angle(x))
+        # mag_positivity = (torch.sign(x.real) + torch.sign(x.imag)) / 2
+        # mag_positivity = (mag_positivity + 1) / 2
+        mags = torch.abs(x) + 1e-6
+        signed_scaled_mags = mags * mag_positivity
+        final_mags = self.activation(signed_scaled_mags)
+        x = x * (final_mags / mags)
 
         return x
+    
+
+class CompAct(nn.Module):
+    def __init__(self, activation):
+        super().__init__()
+        self.activation = activation
+
+    def forward(
+        self,
+        x: Tensor,
+    ) -> Tensor:
+        return torch.complex(self.activation(x.real), self.activation(x.imag))
 
 
 def recenter(x: Tensor, dim: tuple) -> Tensor:
     return x - torch.mean(x, dim=dim, keepdim=True)
 
-
-class Recenter(nn.Module):
-    def __init__(self, dim):
-        super().__init__()
-        self.dim = dim
-
-    def forward(self, x: Tensor) -> Tensor:
-        return recenter(x, self.dim)
 
 
 def magnitude_exponent(x: Tensor, pow) -> Tensor:
@@ -76,7 +94,7 @@ def magnitude_exponent(x: Tensor, pow) -> Tensor:
     return x
 
 
-class MagnitudeExponent(nn.Module):
+class MagExp(nn.Module):
     def __init__(self, width, pow=1.0):
         super().__init__()
         self.pow_offset = nn.Parameter(torch.full((width,), float(pow - 1)))
@@ -85,7 +103,20 @@ class MagnitudeExponent(nn.Module):
         return magnitude_exponent(x, self.pow_offset + 1)
 
 
-class ComplexExponential(nn.Module):
+class MagNorm(nn.Module):
+    def __init__(self, width, pow=0.5, recenter=True):
+        super().__init__()
+        self.magexp = MagExp(width, pow=pow)
+        self.maglinear = MagLinear(width, bias=True)
+        self.recenter = recenter
+    def forward(self, x: Tensor) -> Tensor:
+        if self.recenter:
+            x = recenter(x, dim=(1,2,3))
+        x = self.magexp(x)
+        x = self.maglinear(x)
+        return x
+
+class CompExp(nn.Module):
     def __init__(self, width):
         super().__init__()
         self.width = width
@@ -134,8 +165,8 @@ class ComplexMLP(nn.Module):
         self.layers = nn.Sequential()
         for _ in range(depth):
             self.layers.append(ComplexLinear(width, width, bias=True))
-            # self.layers.append(Recenter(dim=-1))
-            self.layers.append(ComplexExponential(width))
+            self.layers.append(MagNorm(width, pow=1.0, recenter=False))
+            self.layers.append(MagAct(nn.ReLU()))
 
     def forward(self, x: Tensor) -> Tensor:
         x = self.layers(x)

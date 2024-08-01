@@ -15,7 +15,7 @@ torch.autograd.set_detect_anomaly(True)
 import wandb
 
 from ..src.model import Spectracles
-from ..src.layers import MagnitudeExponent
+from ..src.layers import MagExp
 
 warnings.filterwarnings(
     "ignore", "Torchinductor does not support code generation for complex operators"
@@ -30,8 +30,8 @@ args = parser.parse_args()
 DEVICE = f"cuda:{args.gpu}" if torch.cuda.is_available() else "cpu"
 
 model_args = dict(
-    blocks=12,
-    width=18,
+    blocks=4,
+    width=32,
     mlp_depth=2,
 )
 
@@ -162,9 +162,7 @@ if not args.print_params:
         train_accuracy = correct / total
 
         print("\n")
-        print([f"{norm.pow_offset[8].item() + 1:.2f}" for norm in model.freq_mag_exps])
-        print([f"{norm.pow_offset[8].item() + 1:.2f}" for norm in model.pixel_mag_exps])
-        exp_params = [p for name, p in model.named_parameters() if "powers" in name]
+        exp_params = [p for name, p in model.named_parameters() if "mlp" in name and "pow_offset" in name]
         print([f"{p[8].item():.2f}" for p in exp_params])
 
         model.eval()
