@@ -107,22 +107,20 @@ def get_rotary_position_vectors(shape, num_frequencies, device):
 class ComplexMLP(nn.Module):
     def __init__(
         self,
-        width_in: int,
-        width_out: int,
-        depth: int = 2,
+        widths: list[int],
     ):
 
         super().__init__()
 
-        widths = [width_in] * (depth - 1) + [width_out]
-        # print(widths)
-
         self.layers = nn.Sequential()
-        for dim_in, dim_out in zip(widths[:-1], widths[1:]):
-            self.layers.append(ComplexLinear(dim_in, dim_out))
-            self.layers.append(CompAct(nn.LeakyReLU(0.1)))
 
-        self.layers.append(ComplexLinear(width_out, width_out))
+        for i, (dim_in, dim_out) in enumerate((zip(widths[:-1], widths[1:]))):
+            self.layers.append(ComplexLinear(dim_in, dim_out))
+
+            if i != len(widths) - 2:
+                self.layers.append(CompAct(nn.LeakyReLU(0.1)))
+
+        self.layers.append(ComplexLinear(widths[-2], widths[-1]))
 
     def forward(self, x: Tensor) -> Tensor:
         x = self.layers(x)

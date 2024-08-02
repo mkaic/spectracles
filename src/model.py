@@ -31,6 +31,8 @@ class Spectracles(nn.Module):
         self.proj_in = nn.Linear(input_channels, width, bias=False)
         self.magnorm_in = MagExpLin(width, power=1.0)
 
+        mlp_widths = [width + pe_dim] + [width] * mlp_depth
+
         self.freq_magnorms = nn.ModuleList()
         self.freq_mlps = nn.ModuleList()
 
@@ -38,11 +40,11 @@ class Spectracles(nn.Module):
         self.pixel_mlps = nn.ModuleList()
 
         for _ in range(blocks):
-            self.freq_magnorms.append(MagExpLin(width, power=0.5))
-            self.freq_mlps.append(ComplexMLP(width, width, depth=mlp_depth))
+            self.freq_magnorms.append(MagExpLin(width + pe_dim, power=0.5))
+            self.freq_mlps.append(ComplexMLP(mlp_widths))
 
-            self.pixel_magnorms.append(MagExpLin(width, power=0.5))
-            self.pixel_mlps.append(ComplexMLP(width, width, depth=mlp_depth))
+            self.pixel_magnorms.append(MagExpLin(width + pe_dim, power=0.5))
+            self.pixel_mlps.append(ComplexMLP(mlp_widths))
 
         self.out_magnorm = MagExpLin(width, power=1.0)
         self.out_proj = ComplexLinear(width, num_classes, bias=True)
@@ -77,16 +79,16 @@ class Spectracles(nn.Module):
 
             x = torch.fft.fftn(x, dim=(1, 2), norm="ortho")
 
-            x = x * self.pos_enc
-            # x = torch.cat([x, self.pos_enc], dim=-1)
+            # x = x * self.pos_enc
+            x = torch.cat([x, self.pos_enc.expand(b, -1, -1, -1)], dim=-1)
 
             x = self.freq_magnorms[i](x)
             x = self.freq_mlps[i](x)
 
             x = torch.fft.ifftn(x, dim=(1, 2), norm="ortho")
 
-            x = x * self.pos_enc
-            # x = torch.cat([x, self.pos_enc], dim=-1)
+            # x = x * self.pos_enc
+            x = torch.cat([x, self.pos_enc.expand(b, -1, -1, -1)], dim=-1)
 
             x = self.pixel_magnorms[i](x)
             x = self.pixel_mlps[i](x)
