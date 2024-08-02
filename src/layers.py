@@ -120,8 +120,6 @@ class ComplexMLP(nn.Module):
             if i != len(widths) - 2:
                 self.layers.append(CompAct(nn.LeakyReLU(0.1)))
 
-        self.layers.append(ComplexLinear(widths[-2], widths[-1]))
-
     def forward(self, x: Tensor) -> Tensor:
         x = self.layers(x)
         return x
