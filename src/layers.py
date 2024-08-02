@@ -118,6 +118,7 @@ class ComplexMLP(nn.Module):
             self.layers.append(ComplexLinear(dim_in, dim_out))
 
             if i != len(widths) - 2:
+                self.layers.append(CompExp(dim_out))
                 self.layers.append(CompAct(nn.LeakyReLU(0.1)))
 
     def forward(self, x: Tensor) -> Tensor:
