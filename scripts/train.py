@@ -6,6 +6,7 @@ import torch
 import torch.nn as nn
 import torchvision.transforms as tvt
 from torch.optim import AdamW
+from torch.optim.lr_scheduler import StepLR
 from torch.utils.data import DataLoader
 from torchvision.datasets import CIFAR100, CIFAR10
 from tqdm import tqdm
@@ -37,7 +38,6 @@ config = dict(
     **model_args,
     batch_size=128,
     lr=1e-3,
-    data_augmentation=False,
 )
 
 EPOCHS = 100
@@ -52,6 +52,9 @@ loss_function = nn.CrossEntropyLoss()
 
 model = Spectracles(num_classes=10, input_channels=3, **model_args)
 model = model.to(DEVICE)
+
+optimizer = AdamW(model.parameters(), lr=config["lr"], weight_decay=0.01)
+# scheduler = StepLR(optimizer, step_size=1, gamma=0.01)
 
 if args.print_params:
     print(model)
@@ -74,33 +77,9 @@ if not args.print_params:
     wandb.run.log_code("./spectracles", include_fn=include_fn)
     wandb.watch(model, log="parameters", log_freq=390)
 
-    train_transforms = (
-        tvt.Compose(
-            [
-                tvt.RandomAffine(
-                    degrees=15,
-                    translate=(0.2, 0.2),
-                    scale=(0.75, 1.25),
-                    shear=10,
-                ),
-                tvt.ColorJitter(
-                    brightness=0.1,
-                    contrast=0.1,
-                    saturation=0.1,
-                    hue=0.1,
-                ),
-                tvt.RandomHorizontalFlip(),
-                tvt.RandomVerticalFlip(),
-                tvt.ToTensor(),
-            ]
-        )
-        if config["data_augmentation"]
-        else tvt.ToTensor()
-    )
-
     # Load the MNIST dataset
     train = CIFAR10(
-        root="./spectracles/data", train=True, download=True, transform=train_transforms
+        root="./spectracles/data", train=True, download=True, transform=tvt.ToTensor()
     )
     test = CIFAR10(
         root="./spectracles/data", train=False, download=True, transform=tvt.ToTensor()
@@ -122,7 +101,6 @@ if not args.print_params:
     )
 
     # Train the model
-    optimizer = AdamW(model.parameters(), lr=config["lr"])
 
     train_accuracy = 0
     test_accuracy = 0
@@ -159,6 +137,9 @@ if not args.print_params:
             )
 
         train_accuracy = correct / total
+
+        # if epoch == 20:
+        #     scheduler.step()
 
         model.eval()
         if SAVE:

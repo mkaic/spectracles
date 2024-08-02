@@ -75,16 +75,18 @@ class Spectracles(nn.Module):
 
             residual = x
 
-            x = torch.fft.fftn(x, dim=(2, 3), norm="ortho")
+            x = torch.fft.fftn(x, dim=(1, 2), norm="ortho")
 
             x = x * self.pos_enc
+            # x = torch.cat([x, self.pos_enc], dim=-1)
 
             x = self.freq_magnorms[i](x)
             x = self.freq_mlps[i](x)
 
-            x = torch.fft.ifftn(x, dim=(2, 3), norm="ortho")
+            x = torch.fft.ifftn(x, dim=(1, 2), norm="ortho")
 
             x = x * self.pos_enc
+            # x = torch.cat([x, self.pos_enc], dim=-1)
 
             x = self.pixel_magnorms[i](x)
             x = self.pixel_mlps[i](x)
