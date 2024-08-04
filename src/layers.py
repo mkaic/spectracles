@@ -110,15 +110,14 @@ def get_rotary_position_vectors(shape, num_frequencies, device):
 
     return positions
 
-class GaussianDropout(nn.Module):
+class ComplexDropout(nn.Module):
     def __init__(self, p: float = 0.5):
         super().__init__()
         self.p = p
 
     def forward(self, x: Tensor) -> Tensor:
         if self.training:
-            # Taken from https://arxiv.org/pdf/1506.02557, "Variational Dropout and the Local Reparameterization Trick" by Kingma et al., 2015, section 3, paragraph 1.
-            mask = torch.randn(size=x.shape, device=x.device) * (self.p / (1 - self.p)) + 1
+            mask = torch.rand(x.shape, device=x.device) > self.p
             x = x * mask
             x = x / (1 - self.p)
         return x
@@ -138,7 +137,7 @@ class ComplexMLP(nn.Module):
         for i, (dim_in, dim_out) in enumerate((zip(widths[:-1], widths[1:]))):
             
             if dropout:
-                self.layers.append(GaussianDropout(0.1))
+                self.layers.append(ComplexDropout(0.1))
 
             self.layers.append(ComplexLinear(dim_in, dim_out))
 
