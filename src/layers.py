@@ -45,17 +45,6 @@ class CompAct(nn.Module):
         x: Tensor,
     ) -> Tensor:
         return torch.complex(self.activation(x.real), self.activation(x.imag))
-    
-
-class PhaseReLU(nn.Module):
-    def forward(self, x: Tensor) -> Tensor:
-        scales = torch.cos(
-            (torch.pi / 4) - torch.angle(x)
-        )
-        # scales = (scales + 1) / 2 # [0, 1]
-        x = x * scales.abs()
-        return x
-
 
 
 class MagExpLin(nn.Module):
@@ -137,7 +126,7 @@ class ComplexMLP(nn.Module):
         for i, (dim_in, dim_out) in enumerate((zip(widths[:-1], widths[1:]))):
             
             if dropout:
-                self.layers.append(ComplexDropout(0.1))
+                self.layers.append(ComplexDropout(0.2))
 
             self.layers.append(ComplexLinear(dim_in, dim_out))
 

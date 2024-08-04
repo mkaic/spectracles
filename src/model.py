@@ -84,7 +84,6 @@ class Spectracles(nn.Module):
             
             x = torch.fft.fftn(x, dim=(1, 2), norm="ortho")
 
-            # x = torch.cat([x, self.pos_enc.expand(b, -1, -1, -1)], dim=-1)
             freq_implicit_filters = self.freq_pe_mlps[i](self.pos_enc)
             x = x * freq_implicit_filters
 
@@ -94,7 +93,6 @@ class Spectracles(nn.Module):
             
             x = torch.fft.ifftn(x, dim=(1, 2), norm="ortho")
 
-            # x = torch.cat([x, self.pos_enc.expand(b, -1, -1, -1)], dim=-1)
             pixel_implicit_filters = self.pixel_pe_mlps[i](self.pos_enc)
             x = x * pixel_implicit_filters
             x = self.post_ifft_magnorms[i](x)

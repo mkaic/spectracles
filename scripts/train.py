@@ -59,7 +59,6 @@ if args.ckpt is not None:
 model = model.to(DEVICE)
 
 optimizer = AdamW(model.parameters(), lr=config["lr"][0][1], weight_decay=0.01)
-# scheduler = StepLR(optimizer, step_size=1, gamma=0.01)
 
 if args.print_params:
     print(model)
