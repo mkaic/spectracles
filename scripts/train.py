@@ -37,7 +37,7 @@ model_args = dict(
 config = dict(
     **model_args,
     batch_size=128,
-    lr=[(0, 1e-3)],
+    lr=[(0, 1e-3), (150, 1e-4), (200, 3e-5)],
 )
 
 EPOCHS = 1000
@@ -54,7 +54,9 @@ model = Spectracles(num_classes=10, input_channels=3, **model_args)
 
 if args.ckpt is not None:
     print(f"Loading weights from {args.ckpt}")
-    print(model.load_state_dict(torch.load(args.ckpt)))
+    weights = torch.load(args.ckpt)
+    weights.pop("pos_enc")
+    print(model.load_state_dict(weights))
 
 model = model.to(DEVICE)
 

@@ -81,7 +81,6 @@ class Spectracles(nn.Module):
 
             residual = x
 
-            
             x = torch.fft.fftn(x, dim=(1, 2), norm="ortho")
 
             freq_implicit_filters = self.freq_pe_mlps[i](self.pos_enc)
@@ -90,13 +89,12 @@ class Spectracles(nn.Module):
             x = self.post_fft_magnorms[i](x)
             x = self.freq_mlps[i](x)
 
-            
             x = torch.fft.ifftn(x, dim=(1, 2), norm="ortho")
 
             pixel_implicit_filters = self.pixel_pe_mlps[i](self.pos_enc)
             x = x * pixel_implicit_filters
             x = self.post_ifft_magnorms[i](x)
-            
+
             x = self.pixel_mlps[i](x)
 
             x = x + residual
