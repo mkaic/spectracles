@@ -30,13 +30,13 @@ DEVICE = f"cuda:{args.gpu}" if torch.cuda.is_available() else "cpu"
 model_args = dict(
     blocks=4,
     width=22,
-    pe_dim=16,
+    pe_dim=22,
 )
 
 config = dict(
     **model_args,
     batch_size=128,
-    lr=1e-3,
+    lr=[(0, 1e-3)],
 )
 
 EPOCHS = 1000
@@ -52,7 +52,7 @@ loss_function = nn.CrossEntropyLoss()
 model = Spectracles(num_classes=10, input_channels=3, **model_args)
 model = model.to(DEVICE)
 
-optimizer = AdamW(model.parameters(), lr=config["lr"], weight_decay=0.01)
+optimizer = AdamW(model.parameters(), lr=config["lr"][0][1], weight_decay=0.01)
 # scheduler = StepLR(optimizer, step_size=1, gamma=0.01)
 
 if args.print_params:
@@ -104,6 +104,12 @@ if not args.print_params:
     train_accuracy = 0
     test_accuracy = 0
     for epoch in range(EPOCHS):
+
+        for e, lr in config["lr"]:
+            if epoch == e:
+                for param_group in optimizer.param_groups:
+                    param_group["lr"] = lr
+
         model.train()
         pbar = tqdm(train_loader, leave=False)
 
@@ -136,9 +142,6 @@ if not args.print_params:
             )
 
         train_accuracy = correct / total
-
-        # if epoch == 20:
-        #     scheduler.step()
 
         model.eval()
         if SAVE:

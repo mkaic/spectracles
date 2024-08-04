@@ -45,10 +45,17 @@ class CompAct(nn.Module):
         x: Tensor,
     ) -> Tensor:
         return torch.complex(self.activation(x.real), self.activation(x.imag))
+    
 
+class PhaseReLU(nn.Module):
+    def forward(self, x: Tensor) -> Tensor:
+        scales = torch.cos(
+            (torch.pi / 4) - torch.angle(x)
+        )
+        # scales = (scales + 1) / 2 # [0, 1]
+        x = x * scales.abs()
+        return x
 
-def recenter(x: Tensor, dim: tuple) -> Tensor:
-    return x - torch.mean(x, dim=dim, keepdim=True)
 
 
 class MagExpLin(nn.Module):
@@ -103,11 +110,25 @@ def get_rotary_position_vectors(shape, num_frequencies, device):
 
     return positions
 
+class GaussianDropout(nn.Module):
+    def __init__(self, p: float = 0.5):
+        super().__init__()
+        self.p = p
+
+    def forward(self, x: Tensor) -> Tensor:
+        if self.training:
+            # Taken from https://arxiv.org/pdf/1506.02557, "Variational Dropout and the Local Reparameterization Trick" by Kingma et al., 2015, section 3, paragraph 1.
+            mask = torch.randn(size=x.shape, device=x.device) * (self.p / (1 - self.p)) + 1
+            x = x * mask
+            x = x / (1 - self.p)
+        return x
+
 
 class ComplexMLP(nn.Module):
     def __init__(
         self,
         widths: list[int],
+        dropout = False,
     ):
 
         super().__init__()
@@ -115,11 +136,18 @@ class ComplexMLP(nn.Module):
         self.layers = nn.Sequential()
 
         for i, (dim_in, dim_out) in enumerate((zip(widths[:-1], widths[1:]))):
+            
+            if dropout:
+                self.layers.append(GaussianDropout(0.1))
+
             self.layers.append(ComplexLinear(dim_in, dim_out))
 
             if i != len(widths) - 2:
                 self.layers.append(CompExp(dim_out))
                 self.layers.append(CompAct(nn.LeakyReLU(0.1)))
+                self.layers.append(CompExp(dim_out))
+                self.layers.append(CompAct(nn.LeakyReLU(0.1)))
+                self.layers.append(CompExp(dim_out))
 
     def forward(self, x: Tensor) -> Tensor:
         x = self.layers(x)
