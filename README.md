@@ -1,8 +1,8 @@
 
 # The idea
-In 2021, a paper was published by Google researchers called [FNet: Mixing Tokens with Fourier Transforms](https://arxiv.org/abs/2105.03824). In it, they explore the possibility of replacing self-attention in a BERT-like language model with literally *just a Fourier transform*. And they found that they could achieve *92% the same accuracy* this way while getting `O(n log n)` sequence-length scaling for practically free. I only found out about this paper last week thanks to this [wonderful Hacker News commenter](https://news.ycombinator.com/item?id=40515957#40519828), but it's been on my mind ever since. Using the Fourier Transform to allow global information mixing makes *so much sense*. I was a bit perplexed by one choice the authors made, though (brought to my attention by this [Reddit commenter](https://old.reddit.com/r/MachineLearning/comments/ncdy6m/r_google_replaces_bert_selfattention_with_fourier/gy7hww1/)): they tossed out the imaginary part of the resulting coefficients! That seemed odd to me.
+In 2021, Google published a paper called [FNet: Mixing Tokens with Fourier Transforms](https://arxiv.org/abs/2105.03824). It explores replacing self-attention in a BERT-like model with *just a Fourier transform*. They found that they could achieve *92% the same accuracy* this way. This is a big deal, because it basically gets you `O(n log n)` sequence-length scaling for free. I found this paper thanks to a [wonderful Hacker News commenter](https://news.ycombinator.com/item?id=40515957#40519828). However, I was confused by one choice the authors made (brought to my attention by this [Reddit commenter](https://old.reddit.com/r/MachineLearning/comments/ncdy6m/r_google_replaces_bert_selfattention_with_fourier/gy7hww1/)): they tossed out the imaginary part of the Fourier coefficients! I was suspicious there were gains to be made, so I made this repo. Since I'm not very interested in NLP, I opted to make a vision arch instead.
 
-In this repo, I'm investigating an extremely simple vision architecture which alternates between convolutional layers with kernel-size 1 (equivalent to running a linear layer on every pixel) and Fourier transforms which produce a grid of complex-valued coefficients the same size as the input image. I apply a version of rotary positional embedding to the resultant Fourier coefficients. I also use layer norm.
+The architecture treats every pixel as a token.
 
 Interestingly, I have found that this architecture works best if its layers are *complex-valued*!
 
@@ -11,4 +11,4 @@ I develop inside of the January 2024 edition of the [Nvidia PyTorch Docker image
 ```docker run -it -d --gpus all -v /workspace:/workspace nvcr.io/nvidia/pytorch:24.01-py3```
 
 # Repo structure
-Implementations are in `src`, training script is in `scripts`, and sanity-checks I wrote while implementing stuff are in `tests`. The training script expects CIFAR-100 to be in a folder called `data`, which is included in `.gitignore` so I don't accidentally attempt to push the dataset.
+Implementations are in `src`, training script is in `scripts` along with a few sanity-checks. The training script expects CIFAR-10/100 to be in a folder called `data`.

@@ -23,14 +23,15 @@ parser = ArgumentParser()
 parser.add_argument("-n", "--name", type=str, default=None)
 parser.add_argument("-g", "--gpu", type=int, default=0)
 parser.add_argument("-p", "--print_params", action="store_true", default=False)
+parser.add_argument("-c", "--ckpt", type=str, default=None)
 args = parser.parse_args()
 
 DEVICE = f"cuda:{args.gpu}" if torch.cuda.is_available() else "cpu"
 
 model_args = dict(
     blocks=4,
-    width=22,
-    pe_dim=22,
+    width=64,
+    pe_dim=64,
 )
 
 config = dict(
@@ -50,6 +51,11 @@ if not Path("spectracles/weights").exists():
 loss_function = nn.CrossEntropyLoss()
 
 model = Spectracles(num_classes=10, input_channels=3, **model_args)
+
+if args.ckpt is not None:
+    print(f"Loading weights from {args.ckpt}")
+    print(model.load_state_dict(torch.load(args.ckpt)))
+
 model = model.to(DEVICE)
 
 optimizer = AdamW(model.parameters(), lr=config["lr"][0][1], weight_decay=0.01)
