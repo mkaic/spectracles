@@ -101,13 +101,13 @@ def get_rotary_position_vectors(shape, num_frequencies, device):
 
 
 class ComplexDropout(nn.Module):
-    def __init__(self, p: float = 0.5):
+    def __init__(self, max_p: float = 0.5):
         super().__init__()
-        self.p = p
+        self.max_p = max_p
 
     def forward(self, x: Tensor) -> Tensor:
         if self.training:
-            p = torch.rand(x.shape[0], device=x.device) * self.p * 2
+            p = torch.rand(x.shape[0], device=x.device) * self.max_p
             p = p.view(-1, 1, 1, 1)
             mask = torch.rand(x.shape, device=x.device) > p
             x = x * mask
@@ -129,7 +129,7 @@ class ComplexMLP(nn.Module):
         for i, (dim_in, dim_out) in enumerate((zip(widths[:-1], widths[1:]))):
 
             if dropout:
-                self.layers.append(ComplexDropout(0.1))
+                self.layers.append(ComplexDropout(max_p=0.1))
 
             self.layers.append(ComplexLinear(dim_in, dim_out))
 

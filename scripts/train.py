@@ -24,14 +24,15 @@ parser.add_argument("-n", "--name", type=str, default=None)
 parser.add_argument("-g", "--gpu", type=int, default=0)
 parser.add_argument("-p", "--print_params", action="store_true", default=False)
 parser.add_argument("-c", "--ckpt", type=str, default=None)
+parser.add_argument("-l", "--logs", action="store_true", default=False)
 args = parser.parse_args()
 
 DEVICE = f"cuda:{args.gpu}" if torch.cuda.is_available() else "cpu"
 
 model_args = dict(
-    blocks=6,
-    width=16,
-    pe_dim=32,
+    blocks=4,
+    width=22,
+    pe_dim=22,
 )
 
 config = dict(
@@ -78,12 +79,12 @@ if not args.print_params:
 
     config["num_params"] = num_params
 
-    wandb.init(project="spectracles", config=config, name=args.name)
-    include_fn = lambda path: path.endswith(".py")
-    wandb.run.log_code("./spectracles", include_fn=include_fn)
-    # wandb.watch(model, log="parameters", log_freq=390)
+    if args.logs:
+        wandb.init(project="spectracles", config=config, name=args.name)
+        include_fn = lambda path: path.endswith(".py")
+        wandb.run.log_code("./spectracles", include_fn=include_fn)
+        wandb.watch(model, log="parameters", log_freq=390)
 
-    # Load the MNIST dataset
     train = CIFAR10(
         root="./spectracles/data", train=True, download=True, transform=tvt.ToTensor()
     )
@@ -173,10 +174,11 @@ if not args.print_params:
 
         test_accuracy = correct / total
 
-        wandb.log(
-            {
-                "train_loss": torch.tensor(losses).mean(),
-                "train_accuracy": train_accuracy,
-                "test_accuracy": test_accuracy,
-            }
-        )
+        if args.logs:
+            wandb.log(
+                {
+                    "train_loss": torch.tensor(losses).mean(),
+                    "train_accuracy": train_accuracy,
+                    "test_accuracy": test_accuracy,
+                }
+            )
