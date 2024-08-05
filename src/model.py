@@ -26,29 +26,40 @@ class Spectracles(nn.Module):
         self.width = width
         self.pe_dim = pe_dim
 
+        r2 = 2 ** 0.5
+        scaled_width = width
+
         self.proj_in = nn.Linear(input_channels, width, bias=False)
         self.magnorm_in = MagExpLin(width, power=1.0)
 
         # length of this list is one longer than the number of layers the MLP will actually have
-        mlp_widths = [width, width, width]
-        pe_mlp_widths = [pe_dim, width, width]
+        
+        freq_mlp_widths = [width, scaled_width, scaled_width]
+        pixel_mlp_widths = [scaled_width, width, width]
 
-        self.freq_pe_mlps = nn.ModuleList()
-        self.post_fft_magnorms = nn.ModuleList()
+        freq_pe_mlp_widths = [pe_dim, scaled_width, scaled_width]
+        pixel_pe_mlp_widths = [pe_dim, width, width]
+
+        self.freq_magnorms_in = nn.ModuleList()
         self.freq_mlps = nn.ModuleList()
+        self.freq_pe_mlps = nn.ModuleList()
+        self.freq_magnorms_out = nn.ModuleList()
 
-        self.pixel_pe_mlps = nn.ModuleList()
-        self.post_ifft_magnorms = nn.ModuleList()
+        self.pixel_magnorms_in = nn.ModuleList()
         self.pixel_mlps = nn.ModuleList()
+        self.pixel_pe_mlps = nn.ModuleList()
+        self.pixel_magnorms_out = nn.ModuleList()
 
         for _ in range(blocks):
-            self.freq_pe_mlps.append(ComplexMLP(pe_mlp_widths))
-            self.post_fft_magnorms.append(MagExpLin(width, power=0.5))
-            self.freq_mlps.append(ComplexMLP(mlp_widths, dropout=True))
+            self.freq_magnorms_in.append(MagExpLin(scaled_width, power=1.0))
+            self.freq_mlps.append(ComplexMLP(freq_mlp_widths, dropout=True))
+            self.freq_pe_mlps.append(ComplexMLP(freq_pe_mlp_widths))
+            self.freq_magnorms_out.append(MagExpLin(scaled_width, power=1.0))
 
-            self.pixel_pe_mlps.append(ComplexMLP(pe_mlp_widths))
-            self.post_ifft_magnorms.append(MagExpLin(width, power=0.5))
-            self.pixel_mlps.append(ComplexMLP(mlp_widths, dropout=True))
+            self.pixel_magnorms_in.append(MagExpLin(width, power=1.0))
+            self.pixel_mlps.append(ComplexMLP(pixel_mlp_widths, dropout=True))
+            self.pixel_pe_mlps.append(ComplexMLP(pixel_pe_mlp_widths))
+            self.pixel_magnorms_out.append(MagExpLin(width, power=1.0))
 
         self.out_magnorm = MagExpLin(width, power=1.0)
         self.out_proj = ComplexLinear(width, num_classes, bias=True)
@@ -83,19 +94,25 @@ class Spectracles(nn.Module):
 
             x = torch.fft.fftn(x, dim=(1, 2), norm="ortho")
 
+            x = self.freq_magnorms_in[i](x)
+            
+            x = self.freq_mlps[i](x)
+
             freq_implicit_filters = self.freq_pe_mlps[i](self.pos_enc)
             x = x * freq_implicit_filters
 
-            x = self.post_fft_magnorms[i](x)
-            x = self.freq_mlps[i](x)
+            x = self.freq_magnorms_out[i](x)
 
             x = torch.fft.ifftn(x, dim=(1, 2), norm="ortho")
 
-            pixel_implicit_filters = self.pixel_pe_mlps[i](self.pos_enc)
-            x = x * pixel_implicit_filters
-            x = self.post_ifft_magnorms[i](x)
+            x = self.pixel_magnorms_in[i](x)
 
             x = self.pixel_mlps[i](x)
+
+            pixel_implicit_filters = self.pixel_pe_mlps[i](self.pos_enc)
+            x = x * pixel_implicit_filters
+
+            x = self.pixel_magnorms_out[i](x)
 
             x = x + residual
 
