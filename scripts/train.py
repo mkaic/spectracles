@@ -29,9 +29,9 @@ args = parser.parse_args()
 DEVICE = f"cuda:{args.gpu}" if torch.cuda.is_available() else "cpu"
 
 model_args = dict(
-    blocks=4,
-    width=64,
-    pe_dim=64,
+    blocks=6,
+    width=16,
+    pe_dim=32,
 )
 
 config = dict(
@@ -81,7 +81,7 @@ if not args.print_params:
     wandb.init(project="spectracles", config=config, name=args.name)
     include_fn = lambda path: path.endswith(".py")
     wandb.run.log_code("./spectracles", include_fn=include_fn)
-    wandb.watch(model, log="parameters", log_freq=390)
+    # wandb.watch(model, log="parameters", log_freq=390)
 
     # Load the MNIST dataset
     train = CIFAR10(

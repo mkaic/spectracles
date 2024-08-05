@@ -129,16 +129,13 @@ class ComplexMLP(nn.Module):
         for i, (dim_in, dim_out) in enumerate((zip(widths[:-1], widths[1:]))):
 
             if dropout:
-                self.layers.append(ComplexDropout(0.25))
+                self.layers.append(ComplexDropout(0.1))
 
             self.layers.append(ComplexLinear(dim_in, dim_out))
 
             if i != len(widths) - 2:
                 self.layers.append(CompExp(dim_out))
                 self.layers.append(CompAct(nn.LeakyReLU(0.1)))
-                self.layers.append(CompExp(dim_out))
-                self.layers.append(CompAct(nn.LeakyReLU(0.1)))
-                self.layers.append(CompExp(dim_out))
 
     def forward(self, x: Tensor) -> Tensor:
         x = self.layers(x)
