@@ -140,7 +140,7 @@ class ComplexMLP(nn.Module):
         for i, (dim_in, dim_out) in enumerate((zip(widths[:-1], widths[1:]))):
 
             if dropout:
-                self.layers.append(ComplexDropout(max_p=0.1))
+                self.layers.append(ComplexDropout(max_p=0.2))
 
             self.layers.append(ComplexLinear(dim_in, dim_out))
 

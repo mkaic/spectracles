@@ -30,9 +30,9 @@ args = parser.parse_args()
 DEVICE = f"cuda:{args.gpu}" if torch.cuda.is_available() else "cpu"
 
 model_args = dict(
-    blocks=4,
-    width=18,
-    pe_dim=18,
+    blocks=6,
+    width=42,
+    pe_dim=42,
 )
 
 config = dict(
