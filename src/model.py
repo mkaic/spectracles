@@ -27,44 +27,59 @@ class Spectracles(nn.Module):
         self.width = width
         self.pe_dim = pe_dim
 
-        r2 = 2**0.5
-        scaled_width = width
-
         self.proj_in = nn.Linear(input_channels, width, bias=False)
         self.magnorm_in = MagExpLin(width, power=1.0)
 
         # length of this list is one longer than the number of layers the MLP will actually have
 
-        freq_mlp_widths = [width, scaled_width, scaled_width]
-        pixel_mlp_widths = [scaled_width, width, width]
+        freq_mlp_widths = [width, width, width]
+        pixel_mlp_widths = [width, width, width]
 
-        freq_pe_mlp_widths = [pe_dim, scaled_width, scaled_width]
+        freq_pe_mlp_widths = [pe_dim, width, width]
         pixel_pe_mlp_widths = [pe_dim, width, width]
 
-        self.freq_magnorms_in = nn.ModuleList()
+        self.freq_magnorms = nn.ModuleList()
         self.freq_mlps = nn.ModuleList()
-        self.freq_pe_mlps = nn.ModuleList()
-        self.freq_magnorms_out = nn.ModuleList()
 
-        self.pixel_magnorms_in = nn.ModuleList()
+        self.pixel_magnorms = nn.ModuleList()
         self.pixel_mlps = nn.ModuleList()
-        self.pixel_pe_mlps = nn.ModuleList()
-        self.pixel_magnorms_out = nn.ModuleList()
-
-        self.residual_gates = nn.ModuleList()
 
         for _ in range(blocks):
-            self.freq_magnorms_in.append(MagExpLin(scaled_width, power=1.0))
-            self.freq_mlps.append(ComplexMLP(freq_mlp_widths, dropout=True))
-            self.freq_pe_mlps.append(ComplexMLP(freq_pe_mlp_widths))
-            self.freq_magnorms_out.append(MagExpLin(scaled_width, power=1.0))
+            self.freq_magnorms.append(
+                nn.ModuleList(
+                    [
+                        MagExpLin(width, power=1.0),
+                        MagExpLin(width, power=1.0),
+                    ]
+                )
+            )
+            self.freq_mlps.append(
+                nn.ModuleList(
+                    [
+                        ComplexMLP(freq_pe_mlp_widths, dropout=False),
+                        ComplexMLP(freq_mlp_widths, dropout=True),
+                        ComplexMLP(freq_pe_mlp_widths, dropout=False),
+                    ]
+                )
+            )
 
-            self.pixel_magnorms_in.append(MagExpLin(width, power=1.0))
-            self.pixel_mlps.append(ComplexMLP(pixel_mlp_widths, dropout=True))
-            self.pixel_pe_mlps.append(ComplexMLP(pixel_pe_mlp_widths))
-            self.pixel_magnorms_out.append(MagExpLin(width, power=1.0))
-
-            self.residual_gates.append(LinearCombination(width))
+            self.pixel_magnorms.append(
+                nn.ModuleList(
+                    [
+                        MagExpLin(width, power=1.0),
+                        MagExpLin(width, power=1.0),
+                    ]
+                )
+            )
+            self.pixel_mlps.append(
+                nn.ModuleList(
+                    [
+                        ComplexMLP(pixel_pe_mlp_widths, dropout=False),
+                        ComplexMLP(pixel_mlp_widths, dropout=True),
+                        ComplexMLP(pixel_pe_mlp_widths, dropout=False),
+                    ]
+                )
+            )
 
         self.out_magnorm = MagExpLin(width, power=1.0)
         self.out_proj = ComplexLinear(width, num_classes, bias=True)
@@ -97,29 +112,31 @@ class Spectracles(nn.Module):
 
             residual = x
 
+
             x = torch.fft.fftn(x, dim=(1, 2), norm="ortho")
 
-            x = self.freq_magnorms_in[i](x)
 
-            x = self.freq_mlps[i](x)
+            x = x * self.freq_mlps[i][0](self.pos_enc)
+            x = self.freq_magnorms[i][0](x)
 
-            freq_implicit_filters = self.freq_pe_mlps[i](self.pos_enc)
-            x = x * freq_implicit_filters
+            x = self.freq_mlps[i][1](x)
 
-            x = self.freq_magnorms_out[i](x)
+            x = x * self.freq_mlps[i][2](self.pos_enc)
+            x = self.freq_magnorms[i][1](x)
+
 
             x = torch.fft.ifftn(x, dim=(1, 2), norm="ortho")
 
-            x = self.pixel_magnorms_in[i](x)
 
-            x = self.pixel_mlps[i](x)
+            x = x * self.pixel_mlps[i][0](self.pos_enc)
+            x = self.pixel_magnorms[i][0](x)
 
-            pixel_implicit_filters = self.pixel_pe_mlps[i](self.pos_enc)
-            x = x * pixel_implicit_filters
+            x = self.pixel_mlps[i][1](x)
 
-            x = self.pixel_magnorms_out[i](x)
+            x = x * self.pixel_mlps[i][2](self.pos_enc)
+            x = self.pixel_magnorms[i][1](x)
 
-            x = self.residual_gates[i](x, residual)
+            x = x + residual
 
         # Average all pixels and make final prediction
         x = self.out_magnorm(x)
