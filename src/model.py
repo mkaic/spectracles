@@ -6,6 +6,7 @@ from .layers import (
     ComplexMLP,
     ComplexLinear,
     MagExpLin,
+    LinearCombination,
     get_rotary_position_vectors,
 )
 
@@ -26,14 +27,14 @@ class Spectracles(nn.Module):
         self.width = width
         self.pe_dim = pe_dim
 
-        r2 = 2 ** 0.5
+        r2 = 2**0.5
         scaled_width = width
 
         self.proj_in = nn.Linear(input_channels, width, bias=False)
         self.magnorm_in = MagExpLin(width, power=1.0)
 
         # length of this list is one longer than the number of layers the MLP will actually have
-        
+
         freq_mlp_widths = [width, scaled_width, scaled_width]
         pixel_mlp_widths = [scaled_width, width, width]
 
@@ -50,6 +51,8 @@ class Spectracles(nn.Module):
         self.pixel_pe_mlps = nn.ModuleList()
         self.pixel_magnorms_out = nn.ModuleList()
 
+        self.residual_gates = nn.ModuleList()
+
         for _ in range(blocks):
             self.freq_magnorms_in.append(MagExpLin(scaled_width, power=1.0))
             self.freq_mlps.append(ComplexMLP(freq_mlp_widths, dropout=True))
@@ -60,6 +63,8 @@ class Spectracles(nn.Module):
             self.pixel_mlps.append(ComplexMLP(pixel_mlp_widths, dropout=True))
             self.pixel_pe_mlps.append(ComplexMLP(pixel_pe_mlp_widths))
             self.pixel_magnorms_out.append(MagExpLin(width, power=1.0))
+
+            self.residual_gates.append(LinearCombination(width))
 
         self.out_magnorm = MagExpLin(width, power=1.0)
         self.out_proj = ComplexLinear(width, num_classes, bias=True)
@@ -95,7 +100,7 @@ class Spectracles(nn.Module):
             x = torch.fft.fftn(x, dim=(1, 2), norm="ortho")
 
             x = self.freq_magnorms_in[i](x)
-            
+
             x = self.freq_mlps[i](x)
 
             freq_implicit_filters = self.freq_pe_mlps[i](self.pos_enc)
@@ -114,7 +119,7 @@ class Spectracles(nn.Module):
 
             x = self.pixel_magnorms_out[i](x)
 
-            x = x + residual
+            x = self.residual_gates[i](x, residual)
 
         # Average all pixels and make final prediction
         x = self.out_magnorm(x)

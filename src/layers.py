@@ -115,6 +115,17 @@ class ComplexDropout(nn.Module):
         return x
 
 
+class LinearCombination(nn.Module):
+    def __init__(self, width):
+        super().__init__()
+        self.width = width
+        self.weights = nn.Parameter(torch.zeros((width,)))
+
+    def forward(self, a: Tensor, b: Tensor) -> Tensor:
+        weights = torch.sigmoid(self.weights)
+        return a * weights + b * (1 - weights)
+
+
 class ComplexMLP(nn.Module):
     def __init__(
         self,

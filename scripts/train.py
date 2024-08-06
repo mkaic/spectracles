@@ -38,8 +38,8 @@ model_args = dict(
 config = dict(
     **model_args,
     batch_size=128,
-    lr=[(0, 1e-3), (150, 1e-4), (200, 3e-5)],
-    data_aug = True,
+    lr=[(0, 1e-3), (150, 1e-4)],
+    data_aug=False,
 )
 
 EPOCHS = 1000
@@ -86,17 +86,23 @@ if not args.print_params:
         wandb.run.log_code("./spectracles", include_fn=include_fn)
         wandb.watch(model, log="parameters", log_freq=390)
 
-    if config["data_aug"]:
-        transform = tvt.Compose(
+    transform = (
+        tvt.Compose(
             [
                 tvt.RandomHorizontalFlip(),
                 tvt.RandomAffine(degrees=15, translate=(0.1, 0.1)),
                 tvt.ToTensor(),
             ]
-        ) if config["data_aug"] else tvt.ToTensor()
+        )
+        if config["data_aug"]
+        else tvt.ToTensor()
+    )
 
     train = CIFAR10(
-        root="./spectracles/data", train=True, download=True, transform=transform,
+        root="./spectracles/data",
+        train=True,
+        download=True,
+        transform=transform,
     )
     test = CIFAR10(
         root="./spectracles/data", train=False, download=True, transform=tvt.ToTensor()
