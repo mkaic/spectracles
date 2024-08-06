@@ -1,7 +1,6 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch import Tensor
 import math
 
 
@@ -30,7 +29,7 @@ class ComplexLinear(nn.Module):
         else:
             self.register_parameter("biases", None)
 
-    def forward(self, x: Tensor):
+    def forward(self, x: torch.Tensor):
         x = F.linear(x, self.weights, self.biases)
         return x
 
@@ -42,8 +41,8 @@ class CompAct(nn.Module):
 
     def forward(
         self,
-        x: Tensor,
-    ) -> Tensor:
+        x: torch.Tensor,
+    ) -> torch.Tensor:
         return torch.complex(self.activation(x.real), self.activation(x.imag))
 
 
@@ -55,7 +54,7 @@ class MagExpLin(nn.Module):
         self.mag_weight_offset = nn.Parameter(torch.zeros((width,)))
         self.mag_bias = nn.Parameter(torch.zeros((width,)))
 
-    def forward(self, x: Tensor) -> Tensor:
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         old_mag = torch.abs(x) + 1e-6
         new_mag = torch.pow(old_mag, self.pow_offset + 1)
         new_mag = new_mag * (self.mag_weight_offset + 1) + self.mag_bias
@@ -69,7 +68,7 @@ class CompExp(nn.Module):
         self.width = width
         self.pow_offset = nn.Parameter(torch.zeros((width,), dtype=torch.complex64))
 
-    def forward(self, x: Tensor) -> Tensor:
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         return torch.pow(x, self.pow_offset + 1)
 
 
@@ -105,7 +104,7 @@ class ComplexDropout(nn.Module):
         super().__init__()
         self.max_p = max_p
 
-    def forward(self, x: Tensor) -> Tensor:
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         if self.training:
             p = torch.rand(x.shape[0], device=x.device) * self.max_p
             p = p.view(-1, 1, 1, 1)
@@ -122,7 +121,7 @@ class LinearCombination(nn.Module):
         self.weights_a = nn.Parameter(torch.ones((width,)))
         self.weights_b = nn.Parameter(torch.ones((width,)))
 
-    def forward(self, a: Tensor, b: Tensor) -> Tensor:
+    def forward(self, a: torch.Tensor, b: torch.Tensor) -> torch.Tensor:
         return a * self.weights_a + b * self.weights_b
 
 
@@ -139,15 +138,63 @@ class ComplexMLP(nn.Module):
 
         for i, (dim_in, dim_out) in enumerate((zip(widths[:-1], widths[1:]))):
 
-            if dropout:
-                self.layers.append(ComplexDropout(max_p=0.2))
-
             self.layers.append(ComplexLinear(dim_in, dim_out))
 
             if i != len(widths) - 2:
                 self.layers.append(CompExp(dim_out))
                 self.layers.append(CompAct(nn.LeakyReLU(0.1)))
+                self.layers.append(ComplexDropout(max_p=0.2))
 
-    def forward(self, x: Tensor) -> Tensor:
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = self.layers(x)
         return x
+
+
+class FourierBlock(nn.Module):
+    def __init__(self, width, pe_dim, inverse=False):
+        super().__init__()
+
+        self.magnorm_in = MagExpLin(width, power=1.0)
+        self.magnorm_out = MagExpLin(width, power=1.0)
+        self.implicit_filters_in = ComplexMLP([pe_dim, width, width], dropout=False)
+        self.implicit_filters_out = ComplexMLP([pe_dim, width, width], dropout=False)
+
+        self.mlp = ComplexMLP([width, width, width], dropout=True)
+
+        self.inverse = inverse
+
+    def forward(self, x: torch.Tensor, pos_enc: torch.Tensor) -> torch.Tensor:
+
+        if self.inverse:
+            x = torch.fft.ifftn(x, dim=(1, 2))
+        else:
+            x = torch.fft.fftn(x, dim=(1, 2))
+
+        x = x * self.implicit_filters_in(pos_enc)
+        x = self.magnorm_in(x)
+
+        x = self.mlp(x)
+
+        x = x * self.implicit_filters_out(pos_enc)
+        x = self.magnorm_out(x)
+
+        return x
+
+class CustomSequential(nn.Module):
+    def __init__(self, *layers):
+        super().__init__()
+        self.layers = nn.ModuleList(layers)
+
+    def forward(self, x, *args) -> torch.Tensor:
+        for layer in self.layers:
+            x = layer(x, *args)
+        return x
+
+class Residual(nn.Module):
+    def __init__(self, *layers):
+        super().__init__()
+        self.layers = CustomSequential(*layers)
+
+    def forward(self, x, *args) -> torch.Tensor:
+        return x + self.layers(x, *args)
+

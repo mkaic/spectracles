@@ -1,13 +1,13 @@
 import torch.nn as nn
-from torch import Tensor
 import torch
 
 from .layers import (
-    ComplexMLP,
+    CustomSequential,
     ComplexLinear,
     MagExpLin,
-    LinearCombination,
     get_rotary_position_vectors,
+    FourierBlock,
+    Residual,
 )
 
 
@@ -30,66 +30,25 @@ class Spectracles(nn.Module):
         self.proj_in = nn.Linear(input_channels, width, bias=False)
         self.magnorm_in = MagExpLin(width, power=1.0)
 
-        # length of this list is one longer than the number of layers the MLP will actually have
+        self.layers = nn.ModuleList()
 
-        freq_mlp_widths = [width, width, width]
-        pixel_mlp_widths = [width, width, width]
-
-        freq_pe_mlp_widths = [pe_dim, width, width]
-        pixel_pe_mlp_widths = [pe_dim, width, width]
-
-        self.freq_magnorms = nn.ModuleList()
-        self.freq_mlps = nn.ModuleList()
-
-        self.pixel_magnorms = nn.ModuleList()
-        self.pixel_mlps = nn.ModuleList()
-
-        for _ in range(blocks):
-            self.freq_magnorms.append(
-                nn.ModuleList(
-                    [
-                        MagExpLin(width, power=1.0),
-                        MagExpLin(width, power=1.0),
-                    ]
-                )
-            )
-            self.freq_mlps.append(
-                nn.ModuleList(
-                    [
-                        ComplexMLP(freq_pe_mlp_widths, dropout=False),
-                        ComplexMLP(freq_mlp_widths, dropout=True),
-                        ComplexMLP(freq_pe_mlp_widths, dropout=False),
-                    ]
-                )
-            )
-
-            self.pixel_magnorms.append(
-                nn.ModuleList(
-                    [
-                        MagExpLin(width, power=1.0),
-                        MagExpLin(width, power=1.0),
-                    ]
-                )
-            )
-            self.pixel_mlps.append(
-                nn.ModuleList(
-                    [
-                        ComplexMLP(pixel_pe_mlp_widths, dropout=False),
-                        ComplexMLP(pixel_mlp_widths, dropout=True),
-                        ComplexMLP(pixel_pe_mlp_widths, dropout=False),
-                    ]
+        for i in range(self.num_layers):
+            self.layers.append(
+                Residual(
+                    FourierBlock(width, pe_dim, inverse=False),
+                    FourierBlock(width, pe_dim, inverse=True),
                 )
             )
 
         self.out_magnorm = MagExpLin(width, power=1.0)
         self.out_proj = ComplexLinear(width, num_classes, bias=True)
 
-        self.register_buffer("pos_enc", None)
+        self.pos_enc = None
 
     def forward(
         self,
-        x: Tensor,
-    ) -> Tensor:
+        x: torch.Tensor,
+    ) -> torch.Tensor:
 
         b, c, h, w = x.shape
 
@@ -107,37 +66,13 @@ class Spectracles(nn.Module):
                 device=x.device,
             ).unsqueeze(0)
 
-        # Bounce back and forth between pixel and frequency spaces
-        for i in range(self.num_layers):
-
-            residual = x
-
-            x = torch.fft.fftn(x, dim=(1, 2), norm="ortho")
-
-            x = x * self.freq_mlps[i][0](self.pos_enc)
-            x = self.freq_magnorms[i][0](x)
-
-            x = self.freq_mlps[i][1](x)
-
-            x = x * self.freq_mlps[i][2](self.pos_enc)
-            x = self.freq_magnorms[i][1](x)
-
-            x = torch.fft.ifftn(x, dim=(1, 2), norm="ortho")
-
-            x = x * self.pixel_mlps[i][0](self.pos_enc)
-            x = self.pixel_magnorms[i][0](x)
-
-            x = self.pixel_mlps[i][1](x)
-
-            x = x * self.pixel_mlps[i][2](self.pos_enc)
-            x = self.pixel_magnorms[i][1](x)
-
-            x = x + residual
+        for layer in self.layers:
+            x = layer(x, self.pos_enc)
 
         # Average all pixels and make final prediction
         x = self.out_magnorm(x)
         x = x.mean(dim=(1, 2))
         x = self.out_proj(x)
-        x = torch.abs(x)
+        x = torch.abs(x) * torch.cos((torch.pi / 4) - torch.angle(x))
 
         return x

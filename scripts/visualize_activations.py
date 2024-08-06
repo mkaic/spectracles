@@ -15,24 +15,19 @@ with torch.no_grad():
 
     epoch = 1
 
-    args = dict(
-        blocks=6,
-        width=48,
-    )
-
-    config = dict(
-        **args,
-        batch_size=4,
-        lr=1e-3,
-        data_augmentation=True,
+    model_args = dict(
+        blocks=12,
+        width=12,
+        pe_dim=12,
     )
 
     weights_path = Path("spectracles/weights")
 
-    model = Spectracles(num_classes=10, input_channels=3, **args)
+    model = Spectracles(num_classes=10, input_channels=3, **model_args)
+
     model.load_state_dict(torch.load(weights_path / f"{epoch:03}.ckpt"))
+
     model = model.to(DEVICE)
-    model = model.to(DTYPE)
     model = model.eval()
 
     activations = {}
@@ -43,7 +38,7 @@ with torch.no_grad():
 
         return hook
 
-    for name, layer in model.mid_layers.named_children():
+    for name, layer in model.freq_magnorms.named_children():
         layer.register_forward_hook(get_activation(name))
 
     # Load the CIFAR100 dataset
