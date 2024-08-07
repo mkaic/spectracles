@@ -2,13 +2,13 @@ import torch.nn as nn
 import torch
 
 from .layers import (
-    CustomSequential,
     ComplexLinear,
-    MagExpLin,
+    MagNorm,
     get_rotary_position_vectors,
     FourierBlock,
-    Residual,
 )
+
+from icecream import ic
 
 
 class Spectracles(nn.Module):
@@ -28,19 +28,17 @@ class Spectracles(nn.Module):
         self.pe_dim = pe_dim
 
         self.proj_in = nn.Linear(input_channels, width, bias=False)
-        self.magnorm_in = MagExpLin(width, power=1.0)
 
-        self.layers = nn.ModuleList()
+        self.freq_layers = nn.ModuleList()
+        self.pixel_layers = nn.ModuleList()
 
         for i in range(self.num_layers):
-            self.layers.append(
-                Residual(
-                    FourierBlock(width, pe_dim, inverse=False),
-                    FourierBlock(width, pe_dim, inverse=True),
-                )
+            self.freq_layers.append(FourierBlock(width, pe_dim, inverse=False))
+            self.pixel_layers.append(
+                FourierBlock(width, pe_dim, inverse=True),
             )
 
-        self.out_magnorm = MagExpLin(width, power=1.0)
+        self.out_magnorm = MagNorm(width, power=1.0)
         self.out_proj = ComplexLinear(width, num_classes, bias=True)
 
         self.pos_enc = None
@@ -54,8 +52,7 @@ class Spectracles(nn.Module):
 
         x = torch.movedim(x, 1, -1)  # B, C, H, W -> B, H, W, C
         x = self.proj_in(x)  # increase channel count
-        x = torch.complex(x, torch.zeros_like(x))
-        x = self.magnorm_in(x)
+        x = torch.complex(x, torch.zeros_like(x) + 1e-6)  # add small imaginary part
 
         if self.pos_enc is None:
             self.pos_enc = get_rotary_position_vectors(
@@ -66,8 +63,11 @@ class Spectracles(nn.Module):
                 device=x.device,
             ).unsqueeze(0)
 
-        for layer in self.layers:
-            x = layer(x, self.pos_enc)
+        for i in range(self.num_layers):
+            residual = x
+            x = self.freq_layers[i](x, self.pos_enc)
+            x = self.pixel_layers[i](x, self.pos_enc)
+            x = x + residual
 
         # Average all pixels and make final prediction
         x = self.out_magnorm(x)

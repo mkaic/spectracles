@@ -11,6 +11,10 @@ from torch.utils.data import DataLoader
 from torchvision.datasets import CIFAR100, CIFAR10
 from tqdm import tqdm
 import wandb
+from icecream import ic
+
+ic.configureOutput(includeContext=True)
+
 
 from ..src.model import Spectracles
 
@@ -25,14 +29,22 @@ parser.add_argument("-g", "--gpu", type=int, default=0)
 parser.add_argument("-p", "--print_params", action="store_true", default=False)
 parser.add_argument("-c", "--ckpt", type=str, default=None)
 parser.add_argument("-l", "--logs", action="store_true", default=False)
+parser.add_argument("-d", "--debug", action="store_true", default=False)
 args = parser.parse_args()
 
 DEVICE = f"cuda:{args.gpu}" if torch.cuda.is_available() else "cpu"
 
+if args.debug:
+    ic.enable()
+    torch.autograd.set_detect_anomaly(True)
+else:
+    ic.disable()
+    torch.autograd.set_detect_anomaly(False)
+
 model_args = dict(
-    blocks=4,
-    width=18,
-    pe_dim=18,
+    blocks=6,
+    width=42,
+    pe_dim=42,
 )
 
 config = dict(

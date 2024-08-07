@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import math
+from icecream import ic
 
 
 class ComplexLinear(nn.Module):
@@ -46,7 +47,7 @@ class CompAct(nn.Module):
         return torch.complex(self.activation(x.real), self.activation(x.imag))
 
 
-class MagExpLin(nn.Module):
+class MagNorm(nn.Module):
     def __init__(self, width, power=1.0):
         super().__init__()
 
@@ -60,6 +61,13 @@ class MagExpLin(nn.Module):
         new_mag = new_mag * (self.mag_weight_offset + 1) + self.mag_bias
         x = x * (new_mag / old_mag)
         return x
+
+
+def maglog(x: torch.Tensor) -> torch.Tensor:
+    old_mag = torch.abs(x) + 1e-6
+    new_mag = torch.log(old_mag)
+    x = x * (new_mag / old_mag)
+    return x
 
 
 class CompExp(nn.Module):
@@ -134,7 +142,7 @@ class ComplexMLP(nn.Module):
 
         super().__init__()
 
-        self.layers = nn.Sequential()
+        self.layers = nn.ModuleList()
 
         for i, (dim_in, dim_out) in enumerate((zip(widths[:-1], widths[1:]))):
 
@@ -143,10 +151,12 @@ class ComplexMLP(nn.Module):
             if i != len(widths) - 2:
                 self.layers.append(CompExp(dim_out))
                 self.layers.append(CompAct(nn.LeakyReLU(0.1)))
+            if dropout:
                 self.layers.append(ComplexDropout(max_p=0.2))
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = self.layers(x)
+        for layer in self.layers:
+            x = layer(x)
         return x
 
 
@@ -154,8 +164,8 @@ class FourierBlock(nn.Module):
     def __init__(self, width, pe_dim, inverse=False):
         super().__init__()
 
-        self.magnorm_in = MagExpLin(width, power=1.0)
-        self.magnorm_out = MagExpLin(width, power=1.0)
+        self.magnorm_in = MagNorm(width, power=0.5)
+        self.magnorm_out = MagNorm(width, power=1.0)
         self.implicit_filters_in = ComplexMLP([pe_dim, width, width], dropout=False)
         self.implicit_filters_out = ComplexMLP([pe_dim, width, width], dropout=False)
 
@@ -165,37 +175,31 @@ class FourierBlock(nn.Module):
 
     def forward(self, x: torch.Tensor, pos_enc: torch.Tensor) -> torch.Tensor:
 
+        b, h, w, c = x.shape
+
         if self.inverse:
             x = torch.fft.ifftn(x, dim=(1, 2))
         else:
             x = torch.fft.fftn(x, dim=(1, 2))
+            x = maglog(x)
+
+        # ic(torch.mean(torch.abs(x), dim=(0,1,2)), torch.std(torch.abs(x), dim=(0,1,2)), torch.max(torch.abs(x)), torch.min(torch.abs(x)))
+
+        # x_pe = torch.cat([x, pos_enc.expand(b, -1, -1, -1)], dim=-1)
+        # x = x * self.implicit_filters_in(x_pe)
+
+        mag_stds = torch.std(torch.abs(x), dim=(1, 2, 3), keepdim=True)
+        x = x / mag_stds
 
         x = x * self.implicit_filters_in(pos_enc)
         x = self.magnorm_in(x)
 
         x = self.mlp(x)
 
+        # x_pe = torch.cat([x, pos_enc.expand(b, -1, -1, -1)], dim=-1)
+        # x = x * self.implicit_filters_out(x_pe)
+
         x = x * self.implicit_filters_out(pos_enc)
         x = self.magnorm_out(x)
 
         return x
-
-
-class CustomSequential(nn.Module):
-    def __init__(self, *layers):
-        super().__init__()
-        self.layers = nn.ModuleList(layers)
-
-    def forward(self, x, *args) -> torch.Tensor:
-        for layer in self.layers:
-            x = layer(x, *args)
-        return x
-
-
-class Residual(nn.Module):
-    def __init__(self, *layers):
-        super().__init__()
-        self.layers = CustomSequential(*layers)
-
-    def forward(self, x, *args) -> torch.Tensor:
-        return x + self.layers(x, *args)
