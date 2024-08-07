@@ -180,6 +180,7 @@ class FourierBlock(nn.Module):
 
         return x
 
+
 class CustomSequential(nn.Module):
     def __init__(self, *layers):
         super().__init__()
@@ -190,6 +191,7 @@ class CustomSequential(nn.Module):
             x = layer(x, *args)
         return x
 
+
 class Residual(nn.Module):
     def __init__(self, *layers):
         super().__init__()
@@ -197,4 +199,3 @@ class Residual(nn.Module):
 
     def forward(self, x, *args) -> torch.Tensor:
         return x + self.layers(x, *args)
-

@@ -73,6 +73,6 @@ class Spectracles(nn.Module):
         x = self.out_magnorm(x)
         x = x.mean(dim=(1, 2))
         x = self.out_proj(x)
-        x = torch.abs(x) * torch.cos((torch.pi / 4) - torch.angle(x))
+        x = torch.abs(x)
 
         return x
