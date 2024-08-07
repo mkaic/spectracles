@@ -43,8 +43,8 @@ else:
 
 model_args = dict(
     blocks=6,
-    width=42,
-    pe_dim=42,
+    width=46,
+    pe_dim=46,
 )
 
 config = dict(

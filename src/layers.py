@@ -164,10 +164,10 @@ class FourierBlock(nn.Module):
     def __init__(self, width, pe_dim, inverse=False):
         super().__init__()
 
-        self.magnorm_in = MagNorm(width, power=0.5)
+        self.magnorm_in = MagNorm(width, power=1.0)
         self.magnorm_out = MagNorm(width, power=1.0)
-        self.implicit_filters_in = ComplexMLP([pe_dim, width, width], dropout=False)
-        self.implicit_filters_out = ComplexMLP([pe_dim, width, width], dropout=False)
+        # self.implicit_filters_in = ComplexMLP([pe_dim+width, width, width], dropout=False)
+        self.implicit_filters_out = ComplexMLP([pe_dim+width, width, width], dropout=False)
 
         self.mlp = ComplexMLP([width, width, width], dropout=True)
 
@@ -178,28 +178,24 @@ class FourierBlock(nn.Module):
         b, h, w, c = x.shape
 
         if self.inverse:
-            x = torch.fft.ifftn(x, dim=(1, 2))
+            x = torch.fft.ifftn(x, dim=(1, 2), norm="ortho")
         else:
-            x = torch.fft.fftn(x, dim=(1, 2))
-            x = maglog(x)
+            x = torch.fft.fftn(x, dim=(1, 2), norm="ortho")
 
         # ic(torch.mean(torch.abs(x), dim=(0,1,2)), torch.std(torch.abs(x), dim=(0,1,2)), torch.max(torch.abs(x)), torch.min(torch.abs(x)))
 
         # x_pe = torch.cat([x, pos_enc.expand(b, -1, -1, -1)], dim=-1)
         # x = x * self.implicit_filters_in(x_pe)
 
-        mag_stds = torch.std(torch.abs(x), dim=(1, 2, 3), keepdim=True)
-        x = x / mag_stds
-
-        x = x * self.implicit_filters_in(pos_enc)
+        # x = x * self.implicit_filters_in(pos_enc)
         x = self.magnorm_in(x)
 
         x = self.mlp(x)
 
-        # x_pe = torch.cat([x, pos_enc.expand(b, -1, -1, -1)], dim=-1)
-        # x = x * self.implicit_filters_out(x_pe)
+        x_pe = torch.cat([x, pos_enc.expand(b, -1, -1, -1)], dim=-1)
+        x = x * self.implicit_filters_out(x_pe)
 
-        x = x * self.implicit_filters_out(pos_enc)
+        # x = x * self.implicit_filters_out(pos_enc)
         x = self.magnorm_out(x)
 
         return x
