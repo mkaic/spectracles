@@ -17,6 +17,7 @@ ic.configureOutput(includeContext=True)
 
 
 from ..src.model import Spectracles
+from ..src.layers import complex_grad_clip
 
 
 warnings.filterwarnings(
@@ -43,8 +44,8 @@ else:
 
 model_args = dict(
     blocks=6,
-    width=46,
-    pe_dim=46,
+    width=52,
+    pe_dim=52,
 )
 
 config = dict(
@@ -65,6 +66,8 @@ if not Path("spectracles/weights").exists():
 loss_function = nn.CrossEntropyLoss()
 
 model = Spectracles(num_classes=10, input_channels=3, **model_args)
+# for p in model.parameters():
+#     p.register_hook(complex_grad_clip)
 
 if args.ckpt is not None:
     print(f"Loading weights from {args.ckpt}")

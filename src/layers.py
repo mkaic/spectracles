@@ -167,7 +167,7 @@ class FourierBlock(nn.Module):
         self.magnorm_in = MagNorm(width, power=1.0)
         self.magnorm_out = MagNorm(width, power=1.0)
         # self.implicit_filters_in = ComplexMLP([pe_dim+width, width, width], dropout=False)
-        self.implicit_filters_out = ComplexMLP([pe_dim+width, width, width], dropout=False)
+        self.implicit_filters_out = ComplexMLP([width, width, width], dropout=False)
 
         self.mlp = ComplexMLP([width, width, width], dropout=True)
 
@@ -192,10 +192,16 @@ class FourierBlock(nn.Module):
 
         x = self.mlp(x)
 
-        x_pe = torch.cat([x, pos_enc.expand(b, -1, -1, -1)], dim=-1)
-        x = x * self.implicit_filters_out(x_pe)
+        x = x * self.implicit_filters_out(pos_enc)
 
         # x = x * self.implicit_filters_out(pos_enc)
         x = self.magnorm_out(x)
 
         return x
+
+
+def complex_grad_clip(grad):
+    if grad is not None:
+        mag = torch.abs(grad) + 1e-6
+        grad = torch.where(mag > 1, grad / mag, grad)
+    return grad
