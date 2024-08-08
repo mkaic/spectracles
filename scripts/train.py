@@ -50,8 +50,8 @@ model_args = dict(
 
 config = dict(
     **model_args,
-    batch_size=32,
-    lr=[(0, 1e-3), (100, 1e-4)],
+    batch_size=96,
+    lr=[(0, 1e-3), (50, 1e-4)],
     data_aug=False,
 )
 
