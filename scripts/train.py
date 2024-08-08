@@ -5,7 +5,7 @@ from pathlib import Path
 import torch
 import torch.nn as nn
 import torchvision.transforms as tvt
-from torch.optim import AdamW
+from torch.optim import AdamW, SGD
 from torch.optim.lr_scheduler import StepLR
 from torch.utils.data import DataLoader
 from torchvision.datasets import CIFAR100, CIFAR10
@@ -51,7 +51,7 @@ model_args = dict(
 config = dict(
     **model_args,
     batch_size=128,
-    lr=[(0, 1e-3), (100, 1e-4)],
+    lr=[(0, 1e-2), (100, 1e-3)],
     data_aug=False,
 )
 
