@@ -5,6 +5,7 @@ from .layers import (
     ComplexLinear,
     MagNorm,
     get_rotary_position_vectors,
+    recenter_normalize,
     FourierBlock,
 )
 
@@ -52,7 +53,9 @@ class Spectracles(nn.Module):
 
         x = torch.movedim(x, 1, -1)  # B, C, H, W -> B, H, W, C
         x = self.proj_in(x)  # increase channel count
-        x = torch.complex(x, torch.zeros_like(x) + 1e-6)  # add small imaginary part
+
+        # normalize input to have zero mean and unit variance
+        x = recenter_normalize(x)
 
         if self.pos_enc is None:
             self.pos_enc = get_rotary_position_vectors(
@@ -64,9 +67,12 @@ class Spectracles(nn.Module):
             ).unsqueeze(0)
 
         for i in range(self.num_layers):
+
             residual = x
+
             x = self.freq_layers[i](x, self.pos_enc)
             x = self.pixel_layers[i](x, self.pos_enc)
+
             x = x + residual
 
         # Average all pixels and make final prediction

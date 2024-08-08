@@ -43,14 +43,14 @@ else:
     torch.autograd.set_detect_anomaly(False)
 
 model_args = dict(
-    blocks=6,
-    width=52,
-    pe_dim=52,
+    blocks=8,
+    width=128,
+    pe_dim=128,
 )
 
 config = dict(
     **model_args,
-    batch_size=128,
+    batch_size=32,
     lr=[(0, 1e-3), (100, 1e-4)],
     data_aug=False,
 )

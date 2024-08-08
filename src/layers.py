@@ -122,15 +122,10 @@ class ComplexDropout(nn.Module):
         return x
 
 
-class LinearCombination(nn.Module):
-    def __init__(self, width):
-        super().__init__()
-        self.width = width
-        self.weights_a = nn.Parameter(torch.ones((width,)))
-        self.weights_b = nn.Parameter(torch.ones((width,)))
-
-    def forward(self, a: torch.Tensor, b: torch.Tensor) -> torch.Tensor:
-        return a * self.weights_a + b * self.weights_b
+def recenter_normalize(x: torch.Tensor) -> torch.Tensor:
+    x = x - torch.mean(x, dim=(1, 2), keepdim=True)
+    x = x / (torch.mean(torch.abs(x), dim=(1, 2), keepdim=True) + 1e-6)
+    return x
 
 
 class ComplexMLP(nn.Module):
@@ -151,8 +146,8 @@ class ComplexMLP(nn.Module):
             if i != len(widths) - 2:
                 self.layers.append(CompExp(dim_out))
                 self.layers.append(CompAct(nn.LeakyReLU(0.1)))
-            if dropout:
-                self.layers.append(ComplexDropout(max_p=0.2))
+                if dropout:
+                    self.layers.append(ComplexDropout(max_p=0.5))
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         for layer in self.layers:
