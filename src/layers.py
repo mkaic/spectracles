@@ -147,7 +147,7 @@ class ComplexMLP(nn.Module):
                 self.layers.append(CompExp(dim_out))
                 self.layers.append(CompAct(nn.LeakyReLU(0.1)))
                 if dropout:
-                    self.layers.append(ComplexDropout(max_p=0.5))
+                    self.layers.append(ComplexDropout(max_p=0.1))
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         for layer in self.layers:
@@ -162,7 +162,7 @@ class FourierBlock(nn.Module):
         self.magnorm_in = MagNorm(width, power=1.0)
         self.magnorm_out = MagNorm(width, power=1.0)
         # self.implicit_filters_in = ComplexMLP([pe_dim+width, width, width], dropout=False)
-        self.implicit_filters_out = ComplexMLP([width, width, width], dropout=False)
+        self.implicit_filters_out = ComplexMLP([pe_dim+width, width, width], dropout=False)
 
         self.mlp = ComplexMLP([width, width, width], dropout=True)
 
@@ -177,10 +177,7 @@ class FourierBlock(nn.Module):
         else:
             x = torch.fft.fftn(x, dim=(1, 2), norm="ortho")
 
-        x = x - torch.mean(x, dim=(1, 2), keepdim=True)  # mean is (0 + 0j)
-        x = x / (
-            torch.mean(torch.abs(x), dim=(1, 2), keepdim=True) + 1e-6
-        )  # mean magnitude is 1
+        x = recenter_normalize(x)  # mean magnitude is 1
 
         # x_pe = torch.cat([x, pos_enc.expand(b, -1, -1, -1)], dim=-1)
         # x = x * self.implicit_filters_in(x_pe)
@@ -190,7 +187,12 @@ class FourierBlock(nn.Module):
 
         x = self.mlp(x)
 
-        x = x * self.implicit_filters_out(pos_enc)
+        x = recenter_normalize(x)
+
+        x_pe = torch.cat([x, pos_enc.expand(b, -1, -1, -1)], dim=-1)
+        x = x * self.implicit_filters_out(x_pe)
+
+        # x = x * self.implicit_filters_out(pos_enc)
 
         # x = x * self.implicit_filters_out(pos_enc)
         x = self.magnorm_out(x)
