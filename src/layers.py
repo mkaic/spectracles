@@ -182,7 +182,10 @@ class FourierBlock(nn.Module):
         else:
             x = torch.fft.fftn(x, dim=(1, 2), norm="ortho")
 
-        # ic(torch.mean(torch.abs(x), dim=(0,1,2)), torch.std(torch.abs(x), dim=(0,1,2)), torch.max(torch.abs(x)), torch.min(torch.abs(x)))
+        x = x - torch.mean(x, dim=(1, 2), keepdim=True)  # mean is (0 + 0j)
+        x = x / (
+            torch.mean(torch.abs(x), dim=(1, 2), keepdim=True) + 1e-6
+        )  # mean magnitude is 1
 
         # x_pe = torch.cat([x, pos_enc.expand(b, -1, -1, -1)], dim=-1)
         # x = x * self.implicit_filters_in(x_pe)
