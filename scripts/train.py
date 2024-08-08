@@ -51,7 +51,7 @@ model_args = dict(
 config = dict(
     **model_args,
     batch_size=128,
-    lr=[(0, 1e-2), (100, 1e-3)],
+    lr=[(0, 1e-3), (100, 1e-4)],
     data_aug=False,
 )
 
