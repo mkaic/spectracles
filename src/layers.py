@@ -35,7 +35,7 @@ class ComplexLinear(nn.Module):
         return x
 
 
-class CompAct(nn.Module):
+class ComplexActivation(nn.Module):
     def __init__(self, activation):
         super().__init__()
         self.activation = activation
@@ -47,30 +47,21 @@ class CompAct(nn.Module):
         return torch.complex(self.activation(x.real), self.activation(x.imag))
 
 
-class MagNorm(nn.Module):
+class ReCenterMagnitudePower(nn.Module):
     def __init__(self, width, power=1.0):
         super().__init__()
 
         self.pow_offset = nn.Parameter(torch.full((width,), float(power - 1)))
-        self.mag_weight_offset = nn.Parameter(torch.zeros((width,)))
-        self.mag_bias = nn.Parameter(torch.zeros((width,)))
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = recenter_normalize(x)
         old_mag = torch.abs(x) + 1e-6
         new_mag = torch.pow(old_mag, self.pow_offset + 1)
-        new_mag = new_mag * (self.mag_weight_offset + 1) + self.mag_bias
         x = x * (new_mag / old_mag)
         return x
 
 
-def maglog(x: torch.Tensor) -> torch.Tensor:
-    old_mag = torch.abs(x) + 1e-6
-    new_mag = torch.log(old_mag)
-    x = x * (new_mag / old_mag)
-    return x
-
-
-class CompExp(nn.Module):
+class ComplexPower(nn.Module):
     def __init__(self, width):
         super().__init__()
         self.width = width
@@ -132,7 +123,7 @@ class ComplexMLP(nn.Module):
     def __init__(
         self,
         widths: list[int],
-        dropout=False,
+        dropout=None,
     ):
 
         super().__init__()
@@ -144,10 +135,10 @@ class ComplexMLP(nn.Module):
             self.layers.append(ComplexLinear(dim_in, dim_out))
 
             if i != len(widths) - 2:
-                self.layers.append(CompExp(dim_out))
-                self.layers.append(CompAct(nn.LeakyReLU(0.1)))
-                if dropout:
-                    self.layers.append(ComplexDropout(max_p=0.1))
+                self.layers.append(ComplexPower(dim_out))
+                self.layers.append(ComplexActivation(nn.LeakyReLU(0.1)))
+                if dropout is not None:
+                    self.layers.append(ComplexDropout(max_p=0.2))
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         for layer in self.layers:
@@ -156,46 +147,36 @@ class ComplexMLP(nn.Module):
 
 
 class FourierBlock(nn.Module):
-    def __init__(self, width, pe_dim, inverse=False):
+    def __init__(self, width, pe_dim, inverse=False, dropout=None):
         super().__init__()
 
-        self.magnorm_in = MagNorm(width, power=1.0)
-        self.magnorm_out = MagNorm(width, power=1.0)
-        # self.implicit_filters_in = ComplexMLP([pe_dim+width, width, width], dropout=False)
-        self.implicit_filters_out = ComplexMLP([pe_dim+width, width, width], dropout=False)
+        self.magpow_a = ReCenterMagnitudePower(width, power=1.0)
+        self.magpow_b = ReCenterMagnitudePower(width, power=1.0)
+        self.magpow_c = ReCenterMagnitudePower(width, power=1.0)
+        # # self.implicit_filters_in = ComplexMLP([pe_dim+width, width, width], dropout=dropout)
+        self.implicit_filters_out = ComplexMLP([pe_dim, width, width, width, width], dropout=None)
 
-        self.mlp = ComplexMLP([width, width, width], dropout=True)
+        self.mlp = ComplexMLP([width, width, width, width, width], dropout=dropout)
+        # self.proj = ComplexLinear(width, width)
 
         self.inverse = inverse
 
     def forward(self, x: torch.Tensor, pos_enc: torch.Tensor) -> torch.Tensor:
-
-        b, h, w, c = x.shape
 
         if self.inverse:
             x = torch.fft.ifftn(x, dim=(1, 2), norm="ortho")
         else:
             x = torch.fft.fftn(x, dim=(1, 2), norm="ortho")
 
-        x = recenter_normalize(x)  # mean magnitude is 1
-
-        # x_pe = torch.cat([x, pos_enc.expand(b, -1, -1, -1)], dim=-1)
-        # x = x * self.implicit_filters_in(x_pe)
-
-        # x = x * self.implicit_filters_in(pos_enc)
-        x = self.magnorm_in(x)
+        x = self.magpow_a(x)
 
         x = self.mlp(x)
 
-        x = recenter_normalize(x)
+        x = self.magpow_b(x)
 
-        x_pe = torch.cat([x, pos_enc.expand(b, -1, -1, -1)], dim=-1)
-        x = x * self.implicit_filters_out(x_pe)
+        x = self.implicit_filters_out(pos_enc) * x
 
-        # x = x * self.implicit_filters_out(pos_enc)
-
-        # x = x * self.implicit_filters_out(pos_enc)
-        x = self.magnorm_out(x)
+        x = self.magpow_c(x)
 
         return x
 
