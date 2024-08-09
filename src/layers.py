@@ -128,6 +128,11 @@ def recenter_normalize(x: torch.Tensor) -> torch.Tensor:
     return x
 
 
+class CosRelu(nn.Module):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return x * torch.cos((torch.pi / 4) - torch.angle(x))
+
+
 class ComplexMLP(nn.Module):
     def __init__(
         self,
@@ -144,8 +149,8 @@ class ComplexMLP(nn.Module):
             self.layers.append(ComplexLinear(dim_in, dim_out))
 
             if i != len(widths) - 2:
-                self.layers.append(CompExp(dim_out))
-                self.layers.append(CompAct(nn.LeakyReLU(0.1)))
+                # self.layers.append(CompExp(dim_out))
+                self.layers.append(CosRelu())
                 if dropout:
                     self.layers.append(ComplexDropout(max_p=0.1))
 
@@ -162,7 +167,9 @@ class FourierBlock(nn.Module):
         self.magnorm_in = MagNorm(width, power=1.0)
         self.magnorm_out = MagNorm(width, power=1.0)
         # self.implicit_filters_in = ComplexMLP([pe_dim+width, width, width], dropout=False)
-        self.implicit_filters_out = ComplexMLP([pe_dim+width, width, width], dropout=False)
+        self.implicit_filters_out = ComplexMLP(
+            [pe_dim + width, width, width], dropout=False
+        )
 
         self.mlp = ComplexMLP([width, width, width], dropout=True)
 
