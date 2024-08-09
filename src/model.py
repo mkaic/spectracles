@@ -3,7 +3,7 @@ import torch
 
 from .layers import (
     ComplexLinear,
-    MagNorm,
+    ReCenterMagnitudePower,
     get_rotary_position_vectors,
     recenter_normalize,
     FourierBlock,
@@ -20,6 +20,7 @@ class Spectracles(nn.Module):
         blocks,
         width,
         pe_dim=None,
+        dropout=None,
     ):
         super().__init__()
         self.input_channels = input_channels
@@ -27,19 +28,24 @@ class Spectracles(nn.Module):
         self.num_layers = blocks
         self.width = width
         self.pe_dim = pe_dim
+        self.dropout = dropout
 
         self.proj_in = nn.Linear(input_channels, width, bias=False)
 
         self.freq_layers = nn.ModuleList()
         self.pixel_layers = nn.ModuleList()
+        self.freq_norms = nn.ModuleList()
+        self.residual_norms = nn.ModuleList()
 
         for i in range(self.num_layers):
-            self.freq_layers.append(FourierBlock(width, pe_dim, inverse=False))
+            self.freq_layers.append(FourierBlock(width, pe_dim, inverse=False, dropout=dropout))
             self.pixel_layers.append(
-                FourierBlock(width, pe_dim, inverse=True),
+                FourierBlock(width, pe_dim, inverse=True, dropout=dropout),
             )
+            self.freq_norms.append(ReCenterMagnitudePower(width, power=1.0))
+            self.residual_norms.append(ReCenterMagnitudePower(width, power=1.0))
 
-        self.out_magnorm = MagNorm(width, power=1.0)
+        self.out_norm = ReCenterMagnitudePower(width, power=1.0)
         self.out_proj = ComplexLinear(width, num_classes, bias=True)
 
         self.pos_enc = None
@@ -53,8 +59,6 @@ class Spectracles(nn.Module):
 
         x = torch.movedim(x, 1, -1)  # B, C, H, W -> B, H, W, C
         x = self.proj_in(x)  # increase channel count
-
-        # normalize input to have zero mean and unit variance
         x = recenter_normalize(x)
 
         if self.pos_enc is None:
@@ -71,12 +75,14 @@ class Spectracles(nn.Module):
             residual = x
 
             x = self.freq_layers[i](x, self.pos_enc)
-            x = self.pixel_layers[i](x, self.pos_enc)
+            x = self.freq_norms[i](x)
 
+            x = self.pixel_layers[i](x, self.pos_enc)
             x = x + residual
+            x = self.residual_norms[i](x)
 
         # Average all pixels and make final prediction
-        x = self.out_magnorm(x)
+        x = self.out_norm(x)
         x = x.mean(dim=(1, 2))
         x = self.out_proj(x)
         x = torch.abs(x)
