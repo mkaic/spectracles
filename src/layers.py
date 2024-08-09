@@ -119,6 +119,11 @@ def recenter_normalize(x: torch.Tensor) -> torch.Tensor:
     return x
 
 
+class CosRelu(nn.Module):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return x * torch.cos((torch.pi / 4) - torch.angle(x))
+
+
 class ComplexMLP(nn.Module):
     def __init__(
         self,
@@ -135,10 +140,11 @@ class ComplexMLP(nn.Module):
             self.layers.append(ComplexLinear(dim_in, dim_out))
 
             if i != len(widths) - 2:
-                self.layers.append(ComplexPower(dim_out))
-                self.layers.append(ComplexActivation(nn.LeakyReLU(0.1)))
-                if dropout is not None:
-                    self.layers.append(ComplexDropout(max_p=0.2))
+                # self.layers.append(CompExp(dim_out))
+                self.layers.append(CosRelu())
+                if dropout:
+                    self.layers.append(ComplexDropout(max_p=0.1))
+
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         for layer in self.layers:
