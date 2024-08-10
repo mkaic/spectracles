@@ -1,40 +1,39 @@
 import torch
 import torch.nn as nn
 
-from ..src.layers import ComplexMLP, get_rotary_position_vectors, recenter_normalize
+from ..src.layers import ComplexMLP, get_rotary_position_vectors
 
 from PIL import Image
 from torchvision.transforms.functional import to_tensor
 from torchvision.io import write_jpeg
 from tqdm import tqdm
 from pathlib import Path
+from argparse import ArgumentParser
 
-PE_DIM = 32
-WIDTH = 32
-DEVICE = torch.device("cuda")
+parser = ArgumentParser()
+parser.add_argument("-g", "--gpu", type=int, default=0)
+args = parser.parse_args()
+
+WIDTH = 24
+DEPTH = 12
+DEVICE = torch.device(f"cuda:{args.gpu}" if torch.cuda.is_available() else "cpu")
 ITERATIONS = 1000
-LR = [(0, 0.01)]
+LR = [(0, 0.001)]
 
 if not Path("spectracles/reconstructions").exists():
     Path("spectracles/reconstructions").mkdir(exist_ok=True, parents=True)
 
 
 class Reconstructor(nn.Module):
-    def __init__(self, pe_dim, width):
+    def __init__(self, width, depth):
         super().__init__()
-        self.pe_dim = pe_dim
-        self.width = width
-        self.freq_mlp = ComplexMLP([pe_dim, width, width, width, width], dropout=False)
-        self.pixel_mlp = ComplexMLP([pe_dim + width, width, width, width, 3])
-        # self.gamma = nn.Parameter(torch.tensor(1.0))
+        layer_dims = [width] * depth + [3]
+        self.mlp = ComplexMLP(layer_dims)
 
     def forward(self, pos_enc) -> torch.Tensor:
-        x = self.freq_mlp(pos_enc)
-        x = torch.fft.ifftn(x, dim=(1, 2), norm="ortho")
-        x = torch.cat([x, pos_enc], dim=-1)
-        x = self.pixel_mlp(x)
+        x = self.mlp(pos_enc)
+        x = torch.fft.ifftn(x, dim=(1, 2), norm="backward")
         x = torch.abs(x)
-        # x = x * self.gamma
         x = 1 - (1 / (1 + x))
         x = x.permute(2, 0, 1)
         return x
@@ -48,11 +47,11 @@ c, h, w = image.shape
 
 pos_enc = get_rotary_position_vectors(
     shape=(h, w),
-    num_frequencies=PE_DIM // 2,
+    num_frequencies=WIDTH // 2,
     device=DEVICE,
 )
 
-reconstructor = Reconstructor(PE_DIM, WIDTH).to(DEVICE)
+reconstructor = Reconstructor(WIDTH, DEPTH).to(DEVICE)
 optimizer = torch.optim.Adam(reconstructor.parameters(), lr=LR[0][1])
 
 num_params = 0

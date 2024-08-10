@@ -38,7 +38,9 @@ class Spectracles(nn.Module):
         self.residual_norms = nn.ModuleList()
 
         for i in range(self.num_layers):
-            self.freq_layers.append(FourierBlock(width, pe_dim, inverse=False, dropout=dropout))
+            self.freq_layers.append(
+                FourierBlock(width, pe_dim, inverse=False, dropout=dropout)
+            )
             self.pixel_layers.append(
                 FourierBlock(width, pe_dim, inverse=True, dropout=dropout),
             )

@@ -44,9 +44,9 @@ else:
 
 model_args = dict(
     blocks=4,
-    width=44,
-    pe_dim=44,
-    dropout=0.2,
+    width=24,
+    pe_dim=32,
+    dropout=0.1,
 )
 
 config = dict(

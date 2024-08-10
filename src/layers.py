@@ -119,9 +119,15 @@ def recenter_normalize(x: torch.Tensor) -> torch.Tensor:
     return x
 
 
-class CosRelu(nn.Module):
+class LeakyCardioid(nn.Module):
+    def __init__(self, negative_slope=0.1):
+        super().__init__()
+        self.negative_slope = negative_slope
+
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return x * torch.cos((torch.pi / 4) - torch.angle(x))
+        scales = torch.cos(torch.angle(x)) + 1
+        scales = scales * (1 - self.negative_slope) + self.negative_slope
+        return x * scales
 
 
 class ComplexMLP(nn.Module):
@@ -137,14 +143,12 @@ class ComplexMLP(nn.Module):
 
         for i, (dim_in, dim_out) in enumerate((zip(widths[:-1], widths[1:]))):
 
+            if dropout:
+                self.layers.append(ComplexDropout(max_p=0.1))
             self.layers.append(ComplexLinear(dim_in, dim_out))
 
             if i != len(widths) - 2:
-                # self.layers.append(CompExp(dim_out))
-                self.layers.append(CosRelu())
-                if dropout:
-                    self.layers.append(ComplexDropout(max_p=0.1))
-
+                self.layers.append(LeakyCardioid(0.01))
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         for layer in self.layers:
@@ -156,14 +160,14 @@ class FourierBlock(nn.Module):
     def __init__(self, width, pe_dim, inverse=False, dropout=None):
         super().__init__()
 
-        self.magpow_a = ReCenterMagnitudePower(width, power=1.0)
-        self.magpow_b = ReCenterMagnitudePower(width, power=1.0)
-        self.magpow_c = ReCenterMagnitudePower(width, power=1.0)
-        # # self.implicit_filters_in = ComplexMLP([pe_dim+width, width, width], dropout=dropout)
-        self.implicit_filters_out = ComplexMLP([pe_dim, width, width, width, width], dropout=None)
+        self.magnorm_a = ReCenterMagnitudePower(width, power=1.0)
+        self.magnorm_b = ReCenterMagnitudePower(width, power=1.0)
+        self.magnorm_c = ReCenterMagnitudePower(width, power=1.0)
+        self.implicit_filters_out = ComplexMLP(
+            [pe_dim, pe_dim, pe_dim, width], dropout=None
+        )
 
-        self.mlp = ComplexMLP([width, width, width, width, width], dropout=dropout)
-        # self.proj = ComplexLinear(width, width)
+        self.mlp = ComplexMLP([width, width, width, width], dropout=dropout)
 
         self.inverse = inverse
 
@@ -174,15 +178,15 @@ class FourierBlock(nn.Module):
         else:
             x = torch.fft.fftn(x, dim=(1, 2), norm="ortho")
 
-        x = self.magpow_a(x)
+        x = self.magnorm_a(x)
 
         x = self.mlp(x)
 
-        x = self.magpow_b(x)
+        x = self.magnorm_b(x)
 
         x = self.implicit_filters_out(pos_enc) * x
 
-        x = self.magpow_c(x)
+        x = self.magnorm_c(x)
 
         return x
 
