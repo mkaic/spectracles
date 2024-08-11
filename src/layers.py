@@ -13,22 +13,25 @@ class ComplexLinear(nn.Module):
 
         bound = math.sqrt(1 / self.in_features)
 
-        real_weights = torch.empty((out_features, in_features))
-        imag_weights = torch.empty((out_features, in_features))
-        nn.init.uniform_(real_weights, -bound, bound)
-        nn.init.uniform_(imag_weights, -bound, bound)
+        weight_magnitudes = torch.empty((out_features, in_features))
+        weight_phases = torch.empty((out_features, in_features))
 
-        self.weights = torch.complex(real_weights, imag_weights)
+        nn.init.uniform_(weight_magnitudes, 0, bound)
+        nn.init.uniform_(weight_phases, -torch.pi, torch.pi)
+
+        self.weights = torch.polar(weight_magnitudes, weight_phases)
         self.weights = nn.Parameter(self.weights)
 
-        if bias:
-            real_bias = torch.zeros(out_features)
-            imag_bias = torch.zeros(out_features)
+        # bias_magnitudes = torch.empty(out_features)
+        # bias_phases = torch.empty(out_features)
 
-            self.biases = torch.complex(real_bias, imag_bias)
-            self.biases = nn.Parameter(self.biases)
-        else:
-            self.register_parameter("biases", None)
+        # nn.init.uniform_(bias_magnitudes, 0, bound)
+        # nn.init.uniform_(bias_phases, -torch.pi, torch.pi)
+
+        # self.biases = torch.polar(bias_magnitudes, bias_phases)
+        # self.biases = torch.zeros(out_features, dtype=torch.complex64)
+        # self.biases = nn.Parameter(self.biases)
+        self.register_parameter("biases", None)
 
     def forward(self, x: torch.Tensor):
         x = F.linear(x, self.weights, self.biases)
@@ -47,16 +50,18 @@ class ComplexActivation(nn.Module):
         return torch.complex(self.activation(x.real), self.activation(x.imag))
 
 
-class ReCenterMagnitudePower(nn.Module):
+class MagNorm(nn.Module):
     def __init__(self, width, power=1.0):
         super().__init__()
 
         self.pow_offset = nn.Parameter(torch.full((width,), float(power - 1)))
+        self.weight_offset = nn.Parameter(torch.zeros((width,)))
+        self.bias = nn.Parameter(torch.zeros((width,)))
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = recenter_normalize(x)
         old_mag = torch.abs(x) + 1e-6
         new_mag = torch.pow(old_mag, self.pow_offset + 1)
+        new_mag = new_mag * (1 + self.weight_offset) + self.bias
         x = x * (new_mag / old_mag)
         return x
 
@@ -119,14 +124,14 @@ def recenter_normalize(x: torch.Tensor) -> torch.Tensor:
     return x
 
 
-class LeakyCardioid(nn.Module):
-    def __init__(self, negative_slope=0.1):
+class LeakyCardiod(nn.Module):
+    def __init__(self, negative_slope=0.01):
         super().__init__()
         self.negative_slope = negative_slope
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         scales = torch.cos(torch.angle(x)) + 1
-        scales = scales * (1 - self.negative_slope) + self.negative_slope
+        scales = scales * (1 - (self.negative_slope * 2)) + self.negative_slope
         return x * scales
 
 
@@ -145,10 +150,12 @@ class ComplexMLP(nn.Module):
 
             if dropout:
                 self.layers.append(ComplexDropout(max_p=0.1))
+
             self.layers.append(ComplexLinear(dim_in, dim_out))
 
             if i != len(widths) - 2:
-                self.layers.append(LeakyCardioid(0.01))
+                # self.layers.append(ComplexPower(dim_out))
+                self.layers.append(LeakyCardiod())
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         for layer in self.layers:
@@ -157,17 +164,15 @@ class ComplexMLP(nn.Module):
 
 
 class FourierBlock(nn.Module):
-    def __init__(self, width, pe_dim, inverse=False, dropout=None):
+    def __init__(self, width, pe_dim, depth, inverse=False, dropout=None):
         super().__init__()
 
-        self.magnorm_a = ReCenterMagnitudePower(width, power=1.0)
-        self.magnorm_b = ReCenterMagnitudePower(width, power=1.0)
-        self.magnorm_c = ReCenterMagnitudePower(width, power=1.0)
-        self.implicit_filters_out = ComplexMLP(
-            [pe_dim, pe_dim, pe_dim, width], dropout=None
-        )
+        self.magnorm_a = MagNorm(width, power=1.0)
+        self.magnorm_b = MagNorm(width, power=1.0)
+        self.magnorm_c = MagNorm(width, power=1.0)
+        self.implicit_filters_out = ComplexMLP([pe_dim] * depth + [width], dropout=None)
 
-        self.mlp = ComplexMLP([width, width, width, width], dropout=dropout)
+        self.mlp = ComplexMLP([width] * (depth + 1), dropout=dropout)
 
         self.inverse = inverse
 
@@ -182,11 +187,9 @@ class FourierBlock(nn.Module):
 
         x = self.mlp(x)
 
-        x = self.magnorm_b(x)
-
         x = self.implicit_filters_out(pos_enc) * x
 
-        x = self.magnorm_c(x)
+        x = self.magnorm_b(x)
 
         return x
 

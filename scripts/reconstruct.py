@@ -14,11 +14,11 @@ parser = ArgumentParser()
 parser.add_argument("-g", "--gpu", type=int, default=0)
 args = parser.parse_args()
 
-WIDTH = 24
-DEPTH = 12
+WIDTH = 128
+DEPTH = 3
 DEVICE = torch.device(f"cuda:{args.gpu}" if torch.cuda.is_available() else "cpu")
 ITERATIONS = 1000
-LR = [(0, 0.001)]
+LR = 1e-3
 
 if not Path("spectracles/reconstructions").exists():
     Path("spectracles/reconstructions").mkdir(exist_ok=True, parents=True)
@@ -29,11 +29,12 @@ class Reconstructor(nn.Module):
         super().__init__()
         layer_dims = [width] * depth + [3]
         self.mlp = ComplexMLP(layer_dims)
+        # self.gamma = nn.Parameter(torch.tensor(1.0))
 
     def forward(self, pos_enc) -> torch.Tensor:
         x = self.mlp(pos_enc)
-        x = torch.fft.ifftn(x, dim=(1, 2), norm="backward")
         x = torch.abs(x)
+        # x = x * self.gamma
         x = 1 - (1 / (1 + x))
         x = x.permute(2, 0, 1)
         return x
@@ -52,7 +53,7 @@ pos_enc = get_rotary_position_vectors(
 )
 
 reconstructor = Reconstructor(WIDTH, DEPTH).to(DEVICE)
-optimizer = torch.optim.Adam(reconstructor.parameters(), lr=LR[0][1])
+optimizer = torch.optim.Adam(reconstructor.parameters(), lr=LR)
 
 num_params = 0
 for p in reconstructor.parameters():
@@ -67,10 +68,6 @@ print(f"{num_params * 4 / 1024:.2f} kB")
 pbar = tqdm(range(ITERATIONS + 1))
 
 for i in pbar:
-    for step, lr in LR:
-        if i == step:
-            for param_group in optimizer.param_groups:
-                param_group["lr"] = lr
     optimizer.zero_grad()
     output = reconstructor(pos_enc)
     error = output - image

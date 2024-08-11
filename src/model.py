@@ -3,7 +3,7 @@ import torch
 
 from .layers import (
     ComplexLinear,
-    ReCenterMagnitudePower,
+    MagNorm,
     get_rotary_position_vectors,
     recenter_normalize,
     FourierBlock,
@@ -37,17 +37,19 @@ class Spectracles(nn.Module):
         self.freq_norms = nn.ModuleList()
         self.residual_norms = nn.ModuleList()
 
+        depth = 2
+
         for i in range(self.num_layers):
             self.freq_layers.append(
-                FourierBlock(width, pe_dim, inverse=False, dropout=dropout)
+                FourierBlock(width, pe_dim, depth, inverse=False, dropout=dropout)
             )
             self.pixel_layers.append(
-                FourierBlock(width, pe_dim, inverse=True, dropout=dropout),
+                FourierBlock(width, pe_dim, depth, inverse=True, dropout=dropout),
             )
-            self.freq_norms.append(ReCenterMagnitudePower(width, power=1.0))
-            self.residual_norms.append(ReCenterMagnitudePower(width, power=1.0))
+            self.freq_norms.append(MagNorm(width, power=1.0))
+            self.residual_norms.append(MagNorm(width, power=1.0))
 
-        self.out_norm = ReCenterMagnitudePower(width, power=1.0)
+        self.out_norm = MagNorm(width, power=1.0)
         self.out_proj = ComplexLinear(width, num_classes, bias=True)
 
         self.pos_enc = None

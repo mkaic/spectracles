@@ -19,6 +19,20 @@ ic.configureOutput(includeContext=True)
 from ..src.model import Spectracles
 from ..src.layers import complex_grad_clip
 
+model_args = dict(
+    blocks=6,
+    width=52,
+    pe_dim=52,
+    dropout=0.2,
+)
+
+config = dict(
+    **model_args,
+    batch_size=128,
+    lr=[(0, 5e-4)],
+    data_aug=False,
+)
+
 
 warnings.filterwarnings(
     "ignore", "Torchinductor does not support code generation for complex operators"
@@ -42,19 +56,6 @@ else:
     ic.disable()
     torch.autograd.set_detect_anomaly(False)
 
-model_args = dict(
-    blocks=4,
-    width=24,
-    pe_dim=32,
-    dropout=0.1,
-)
-
-config = dict(
-    **model_args,
-    batch_size=128,
-    lr=[(0, 1e-3)],
-    data_aug=False,
-)
 
 EPOCHS = 1000
 SAVE = True
