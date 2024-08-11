@@ -34,8 +34,6 @@ class Spectracles(nn.Module):
 
         self.freq_layers = nn.ModuleList()
         self.pixel_layers = nn.ModuleList()
-        self.freq_norms = nn.ModuleList()
-        self.residual_norms = nn.ModuleList()
 
         depth = 2
 
@@ -46,8 +44,6 @@ class Spectracles(nn.Module):
             self.pixel_layers.append(
                 FourierBlock(width, pe_dim, depth, inverse=True, dropout=dropout),
             )
-            self.freq_norms.append(MagNorm(width, power=1.0))
-            self.residual_norms.append(MagNorm(width, power=1.0))
 
         self.out_norm = MagNorm(width, power=1.0)
         self.out_proj = ComplexLinear(width, num_classes, bias=True)
@@ -63,7 +59,7 @@ class Spectracles(nn.Module):
 
         x = torch.movedim(x, 1, -1)  # B, C, H, W -> B, H, W, C
         x = self.proj_in(x)  # increase channel count
-        x = recenter_normalize(x)
+        # x = recenter_normalize(x)
 
         if self.pos_enc is None:
             self.pos_enc = get_rotary_position_vectors(
@@ -77,13 +73,9 @@ class Spectracles(nn.Module):
         for i in range(self.num_layers):
 
             residual = x
-
             x = self.freq_layers[i](x, self.pos_enc)
-            x = self.freq_norms[i](x)
-
             x = self.pixel_layers[i](x, self.pos_enc)
             x = x + residual
-            x = self.residual_norms[i](x)
 
         # Average all pixels and make final prediction
         x = self.out_norm(x)

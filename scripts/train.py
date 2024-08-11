@@ -20,16 +20,16 @@ from ..src.model import Spectracles
 from ..src.layers import complex_grad_clip
 
 model_args = dict(
-    blocks=6,
-    width=52,
-    pe_dim=52,
+    blocks=4,
+    width=24,
+    pe_dim=24,
     dropout=0.2,
 )
 
 config = dict(
     **model_args,
     batch_size=128,
-    lr=[(0, 5e-4)],
+    lr=[(0, 1e-3), (100, 1e-4)],
     data_aug=False,
 )
 

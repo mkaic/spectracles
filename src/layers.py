@@ -22,16 +22,18 @@ class ComplexLinear(nn.Module):
         self.weights = torch.polar(weight_magnitudes, weight_phases)
         self.weights = nn.Parameter(self.weights)
 
-        # bias_magnitudes = torch.empty(out_features)
-        # bias_phases = torch.empty(out_features)
+        if bias:
+            bias_magnitudes = torch.empty(out_features)
+            bias_phases = torch.empty(out_features)
 
-        # nn.init.uniform_(bias_magnitudes, 0, bound)
-        # nn.init.uniform_(bias_phases, -torch.pi, torch.pi)
+            nn.init.uniform_(bias_magnitudes, 0, bound)
+            nn.init.uniform_(bias_phases, -torch.pi, torch.pi)
 
-        # self.biases = torch.polar(bias_magnitudes, bias_phases)
-        # self.biases = torch.zeros(out_features, dtype=torch.complex64)
-        # self.biases = nn.Parameter(self.biases)
-        self.register_parameter("biases", None)
+            self.biases = torch.polar(bias_magnitudes, bias_phases)
+            self.biases = torch.zeros(out_features, dtype=torch.complex64)
+            self.biases = nn.Parameter(self.biases)
+        else:
+            self.register_parameter("biases", None)
 
     def forward(self, x: torch.Tensor):
         x = F.linear(x, self.weights, self.biases)
@@ -124,7 +126,7 @@ def recenter_normalize(x: torch.Tensor) -> torch.Tensor:
     return x
 
 
-class LeakyCardiod(nn.Module):
+class LeakyCardioid(nn.Module):
     def __init__(self, negative_slope=0.01):
         super().__init__()
         self.negative_slope = negative_slope
@@ -148,14 +150,14 @@ class ComplexMLP(nn.Module):
 
         for i, (dim_in, dim_out) in enumerate((zip(widths[:-1], widths[1:]))):
 
-            if dropout:
-                self.layers.append(ComplexDropout(max_p=0.1))
-
             self.layers.append(ComplexLinear(dim_in, dim_out))
 
             if i != len(widths) - 2:
-                # self.layers.append(ComplexPower(dim_out))
-                self.layers.append(LeakyCardiod())
+                self.layers.append(ComplexPower(dim_out))
+                # self.layers.append(LeakyCardioid())
+                self.layers.append(ComplexActivation(nn.LeakyReLU(0.1)))
+            if dropout:
+                self.layers.append(ComplexDropout(max_p=dropout))
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         for layer in self.layers:
@@ -167,9 +169,8 @@ class FourierBlock(nn.Module):
     def __init__(self, width, pe_dim, depth, inverse=False, dropout=None):
         super().__init__()
 
-        self.magnorm_a = MagNorm(width, power=1.0)
-        self.magnorm_b = MagNorm(width, power=1.0)
-        self.magnorm_c = MagNorm(width, power=1.0)
+        self.magnorm_in = MagNorm(width, power=1.0)
+        self.magnorm_out = MagNorm(width, power=1.0)
         self.implicit_filters_out = ComplexMLP([pe_dim] * depth + [width], dropout=None)
 
         self.mlp = ComplexMLP([width] * (depth + 1), dropout=dropout)
@@ -183,13 +184,15 @@ class FourierBlock(nn.Module):
         else:
             x = torch.fft.fftn(x, dim=(1, 2), norm="ortho")
 
-        x = self.magnorm_a(x)
+        x = recenter_normalize(x)
+
+        x = self.magnorm_in(x)
 
         x = self.mlp(x)
 
         x = self.implicit_filters_out(pos_enc) * x
 
-        x = self.magnorm_b(x)
+        x = self.magnorm_out(x)
 
         return x
 

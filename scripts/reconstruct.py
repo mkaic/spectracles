@@ -9,16 +9,17 @@ from torchvision.io import write_jpeg
 from tqdm import tqdm
 from pathlib import Path
 from argparse import ArgumentParser
+from pytorch_msssim import ms_ssim
 
 parser = ArgumentParser()
 parser.add_argument("-g", "--gpu", type=int, default=0)
 args = parser.parse_args()
 
-WIDTH = 128
-DEPTH = 3
+WIDTH = 48
+DEPTH = 8
 DEVICE = torch.device(f"cuda:{args.gpu}" if torch.cuda.is_available() else "cpu")
 ITERATIONS = 1000
-LR = 1e-3
+LR = 3e-2
 
 if not Path("spectracles/reconstructions").exists():
     Path("spectracles/reconstructions").mkdir(exist_ok=True, parents=True)
@@ -29,7 +30,7 @@ class Reconstructor(nn.Module):
         super().__init__()
         layer_dims = [width] * depth + [3]
         self.mlp = ComplexMLP(layer_dims)
-        # self.gamma = nn.Parameter(torch.tensor(1.0))
+        # self.gamma = nn.Parameter(torch.tensor(0.0))
 
     def forward(self, pos_enc) -> torch.Tensor:
         x = self.mlp(pos_enc)
@@ -71,12 +72,18 @@ for i in pbar:
     optimizer.zero_grad()
     output = reconstructor(pos_enc)
     error = output - image
+    ms_ssim_loss = -1 * ms_ssim(
+        output.unsqueeze(0), image.unsqueeze(0), data_range=1, size_average=True
+    )
     mse = torch.mean(torch.square(error))
     mae = torch.mean(torch.abs(error))
-    mse.backward()
+    loss = mse + mae + ms_ssim_loss
+    loss.backward()
     optimizer.step()
 
-    pbar.set_description(f"RMSE: {torch.sqrt(mse).item():.4f} | MAE: {mae.item():.4f}")
+    pbar.set_description(
+        f"RMSE: {torch.sqrt(mse).item():.4f} | MAE: {mae.item():.4f} | SSIM: {-ms_ssim_loss.item():.4f}"
+    )
 
     if i % 100 == 0:
         output = output * 255
