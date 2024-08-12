@@ -15,8 +15,8 @@ parser = ArgumentParser()
 parser.add_argument("-g", "--gpu", type=int, default=0)
 args = parser.parse_args()
 
-WIDTH = 48
-DEPTH = 8
+WIDTH = 64
+DEPTH = 3
 DEVICE = torch.device(f"cuda:{args.gpu}" if torch.cuda.is_available() else "cpu")
 ITERATIONS = 1000
 LR = 3e-2

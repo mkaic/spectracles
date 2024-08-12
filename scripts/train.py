@@ -18,16 +18,16 @@ ic.configureOutput(includeContext=True)
 from ..src.model import Spectracles
 
 model_args = dict(
-    blocks=8,
-    width=32,
-    pe_dim=32,
-    mlp_depth=4,
+    blocks=4,
+    width=24,
+    pe_dim=24,
+    mlp_depth=2,
     dropout=0.2,
 )
 
 config = dict(
     **model_args,
-    batch_size=64,
+    batch_size=128,
     lr=[(0, 1e-3), (100, 1e-4)],
     data_aug=False,
 )
