@@ -18,10 +18,10 @@ ic.configureOutput(includeContext=True)
 from ..src.model import Spectracles
 
 model_args = dict(
-    blocks=16,
-    width=64,
-    pe_dim=64,
-    mlp_depth=2,
+    blocks=8,
+    width=32,
+    pe_dim=32,
+    mlp_depth=4,
     dropout=0.2,
 )
 
