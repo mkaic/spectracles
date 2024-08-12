@@ -57,13 +57,13 @@ class MagNorm(nn.Module):
         super().__init__()
 
         self.pow_offset = nn.Parameter(torch.full((width,), float(power - 1)))
-        self.weight_offset = nn.Parameter(torch.zeros((width,)))
-        self.bias = nn.Parameter(torch.zeros((width,)))
+        # self.weight_offset = nn.Parameter(torch.zeros((width,)))
+        # self.bias = nn.Parameter(torch.zeros((width,)))
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         old_mag = torch.abs(x) + 1e-6
         new_mag = torch.pow(old_mag, self.pow_offset + 1)
-        new_mag = new_mag * (1 + self.weight_offset) + self.bias
+        # new_mag = new_mag * (1 + self.weight_offset) + self.bias
         x = x * (new_mag / old_mag)
         return x
 
@@ -153,9 +153,7 @@ class ComplexMLP(nn.Module):
             self.layers.append(ComplexLinear(dim_in, dim_out))
 
             if i != len(widths) - 2:
-                self.layers.append(ComplexPower(dim_out))
-                # self.layers.append(LeakyCardioid())
-                self.layers.append(ComplexActivation(nn.LeakyReLU(0.1)))
+                self.layers.append(LeakyCardioid(0.01))
             if dropout:
                 self.layers.append(ComplexDropout(max_p=dropout))
 
@@ -171,7 +169,7 @@ class FourierBlock(nn.Module):
 
         self.magnorm_in = MagNorm(width, power=1.0)
         self.magnorm_out = MagNorm(width, power=1.0)
-        self.implicit_filters_out = ComplexMLP([pe_dim] * depth + [width], dropout=None)
+        self.implicit_filters_out = ComplexMLP([pe_dim] + [width] * depth, dropout=None)
 
         self.mlp = ComplexMLP([width] * (depth + 1), dropout=dropout)
 

@@ -15,14 +15,13 @@ from icecream import ic
 
 ic.configureOutput(includeContext=True)
 
-
 from ..src.model import Spectracles
-from ..src.layers import complex_grad_clip
 
 model_args = dict(
-    blocks=4,
-    width=24,
-    pe_dim=24,
+    blocks=8,
+    width=46,
+    pe_dim=46,
+    mlp_depth=2,
     dropout=0.2,
 )
 

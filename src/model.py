@@ -19,6 +19,7 @@ class Spectracles(nn.Module):
         num_classes,
         blocks,
         width,
+        mlp_depth,
         pe_dim=None,
         dropout=None,
     ):
@@ -27,6 +28,7 @@ class Spectracles(nn.Module):
         self.num_classes = num_classes
         self.num_layers = blocks
         self.width = width
+        self.mlp_depth = mlp_depth
         self.pe_dim = pe_dim
         self.dropout = dropout
 
@@ -35,14 +37,16 @@ class Spectracles(nn.Module):
         self.freq_layers = nn.ModuleList()
         self.pixel_layers = nn.ModuleList()
 
-        depth = 2
-
         for i in range(self.num_layers):
             self.freq_layers.append(
-                FourierBlock(width, pe_dim, depth, inverse=False, dropout=dropout)
+                FourierBlock(
+                    width, pe_dim, depth=mlp_depth, inverse=False, dropout=dropout
+                )
             )
             self.pixel_layers.append(
-                FourierBlock(width, pe_dim, depth, inverse=True, dropout=dropout),
+                FourierBlock(
+                    width, pe_dim, depth=mlp_depth, inverse=True, dropout=dropout
+                ),
             )
 
         self.out_norm = MagNorm(width, power=1.0)
@@ -59,7 +63,6 @@ class Spectracles(nn.Module):
 
         x = torch.movedim(x, 1, -1)  # B, C, H, W -> B, H, W, C
         x = self.proj_in(x)  # increase channel count
-        # x = recenter_normalize(x)
 
         if self.pos_enc is None:
             self.pos_enc = get_rotary_position_vectors(
