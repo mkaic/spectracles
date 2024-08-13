@@ -19,12 +19,12 @@ parser = ArgumentParser()
 parser.add_argument("-g", "--gpu", type=int, default=0)
 args = parser.parse_args()
 
-WIDTH = 24
+WIDTH = 48
 PE_FREQS = 12
-DEPTH = 6
+DEPTH = 4
 DEVICE = torch.device(f"cuda:{args.gpu}" if torch.cuda.is_available() else "cpu")
 ITERATIONS = 2000
-LR = 1e-2
+LR = 5e-2
 
 if not Path("spectracles/reconstructions").exists():
     Path("spectracles/reconstructions").mkdir(exist_ok=True, parents=True)
