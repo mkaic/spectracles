@@ -5,6 +5,7 @@ from .layers import (
     ComplexLinear,
     MagNorm,
     get_rotary_position_vectors,
+    get_binary_tree_rotary_position_vectors,
     recenter_normalize,
     FourierBlock,
 )
@@ -19,7 +20,8 @@ class Spectracles(nn.Module):
         num_classes,
         blocks,
         width,
-        mlp_depth,
+        main_mlp_depth,
+        implicit_mlp_depth,
         pe_dim=None,
         dropout=None,
     ):
@@ -28,7 +30,6 @@ class Spectracles(nn.Module):
         self.num_classes = num_classes
         self.num_layers = blocks
         self.width = width
-        self.mlp_depth = mlp_depth
         self.pe_dim = pe_dim
         self.dropout = dropout
 
@@ -40,12 +41,22 @@ class Spectracles(nn.Module):
         for i in range(self.num_layers):
             self.freq_layers.append(
                 FourierBlock(
-                    width, pe_dim, depth=mlp_depth, inverse=False, dropout=dropout
+                    width,
+                    pe_dim,
+                    main_depth=main_mlp_depth,
+                    implicit_depth=implicit_mlp_depth,
+                    inverse=False,
+                    dropout=dropout,
                 )
             )
             self.pixel_layers.append(
                 FourierBlock(
-                    width, pe_dim, depth=mlp_depth, inverse=True, dropout=dropout
+                    width,
+                    pe_dim,
+                    main_depth=main_mlp_depth,
+                    implicit_depth=implicit_mlp_depth,
+                    inverse=True,
+                    dropout=dropout,
                 ),
             )
 
@@ -65,7 +76,7 @@ class Spectracles(nn.Module):
         x = self.proj_in(x)  # increase channel count
 
         if self.pos_enc is None:
-            self.pos_enc = get_rotary_position_vectors(
+            self.pos_enc = get_binary_tree_rotary_position_vectors(
                 shape=x.shape[1:3],
                 num_frequencies=(
                     self.pe_dim // 2 if self.pe_dim is not None else x.shape[-1] // 2

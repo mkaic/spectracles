@@ -105,6 +105,27 @@ def get_rotary_position_vectors(shape, num_frequencies, device):
     return positions
 
 
+def get_binary_tree_rotary_position_vectors(shape, num_frequencies, device):
+    positions = torch.stack(
+        torch.meshgrid(
+            *[torch.arange(i, dtype=torch.float32, device=device) for i in shape],
+            indexing="ij"
+        ),
+        dim=-1,
+    )
+
+    positions = positions * torch.pi  # 1pi, 2pi, 3pi, etc
+    freq_bands = []
+
+    for freq_idx in range(num_frequencies):
+        for pe_axis in range(2):
+            pos = positions[..., pe_axis] / (2**freq_idx)
+            freq_bands.append(torch.polar(torch.ones_like(pos), pos))
+
+    positions = torch.stack(freq_bands, dim=-1)  # H, W, C
+    return positions
+
+
 class ComplexDropout(nn.Module):
     def __init__(self, max_p: float = 0.5):
         super().__init__()
@@ -164,14 +185,18 @@ class ComplexMLP(nn.Module):
 
 
 class FourierBlock(nn.Module):
-    def __init__(self, width, pe_dim, depth, inverse=False, dropout=None):
+    def __init__(
+        self, width, pe_dim, main_depth, implicit_depth, inverse=False, dropout=None
+    ):
         super().__init__()
 
         self.magnorm_in = MagNorm(width, power=1.0)
         self.magnorm_out = MagNorm(width, power=1.0)
-        self.implicit_filters_out = ComplexMLP([pe_dim] + [width] * depth, dropout=None)
+        self.implicit_filters_out = ComplexMLP(
+            [pe_dim] * implicit_depth + [width], dropout=None
+        )
 
-        self.mlp = ComplexMLP([width] * (depth + 1), dropout=dropout)
+        self.mlp = ComplexMLP([width] * (main_depth + 1), dropout=dropout)
 
         self.inverse = inverse
 
