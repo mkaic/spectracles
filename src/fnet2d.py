@@ -4,6 +4,7 @@ import torch
 from .layers import (
     ComplexLinear,
     MagNorm,
+    get_sinusoidal_position_vectors,
     get_rotary_position_vectors,
     get_binary_tree_rotary_position_vectors,
     FourierBlock,
@@ -75,7 +76,7 @@ class Spectracles(nn.Module):
         x = self.proj_in(x)  # increase channel count
 
         if self.pos_enc is None:
-            self.pos_enc = get_rotary_position_vectors(
+            self.pos_enc = get_binary_tree_rotary_position_vectors(
                 shape=x.shape[1:3],
                 num_frequencies=(
                     self.pe_dim // 2 if self.pe_dim is not None else x.shape[-1] // 2

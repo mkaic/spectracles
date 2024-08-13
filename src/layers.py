@@ -78,7 +78,7 @@ class ComplexPower(nn.Module):
         return torch.pow(x, self.pow_offset + 1)
 
 
-def get_rotary_position_vectors(shape, num_frequencies, device):
+def get_rotary_position_vectors(shape, num_frequencies, device, complex=True):
 
     positions = torch.stack(
         torch.meshgrid(
@@ -91,14 +91,18 @@ def get_rotary_position_vectors(shape, num_frequencies, device):
     freq_bands = []
 
     for freq_idx in range(1, num_frequencies + 1):
-        for pe_axis in range(2):
+        for pe_axis in range(len(shape)):
             pos = positions[..., pe_axis] * (
                 1 / (10000 ** (freq_idx / num_frequencies))
             )
             cos = torch.cos(pos)
             sin = torch.sin(pos)
-            complex_view = torch.complex(cos, sin)  # H, W
-            freq_bands.append(complex_view)
+            if complex:
+                complex_view = torch.complex(cos, sin)  # H, W
+                freq_bands.append(complex_view)
+            else:
+                freq_bands.append(cos)
+                freq_bands.append(sin)
 
     positions = torch.stack(freq_bands, dim=-1)  # H, W, C
 
@@ -118,7 +122,7 @@ def get_binary_tree_rotary_position_vectors(shape, num_frequencies, device):
     freq_bands = []
 
     for freq_idx in range(num_frequencies):
-        for pe_axis in range(2):
+        for pe_axis in range(len(shape)):
             pos = positions[..., pe_axis] / (2**freq_idx)
             freq_bands.append(torch.polar(torch.ones_like(pos), pos))
 
@@ -175,8 +179,8 @@ class ComplexMLP(nn.Module):
 
             if i != len(widths) - 2:
                 self.layers.append(LeakyCardioid(0.01))
-            if dropout:
-                self.layers.append(ComplexDropout(max_p=dropout))
+                if dropout:
+                    self.layers.append(ComplexDropout(max_p=dropout))
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         for layer in self.layers:
@@ -192,12 +196,12 @@ class FourierBlock(nn.Module):
 
         self.magnorm_in = MagNorm(width, power=1.0)
         self.magnorm_out = MagNorm(width, power=1.0)
-        self.implicit_filters_out = ComplexMLP(
-            [pe_dim] * implicit_depth + [width], dropout=None
-        )
 
         self.mlp = ComplexMLP([width] * (main_depth + 1), dropout=dropout)
 
+        self.implicit_filters_out = ComplexMLP(
+            [pe_dim] * implicit_depth + [width], dropout=None
+        )
         self.inverse = inverse
 
     def forward(self, x: torch.Tensor, pos_enc: torch.Tensor) -> torch.Tensor:

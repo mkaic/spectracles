@@ -19,21 +19,21 @@ parser = ArgumentParser()
 parser.add_argument("-g", "--gpu", type=int, default=0)
 args = parser.parse_args()
 
-WIDTH = 48
+# WIDTH = 48
 PE_FREQS = 12
 DEPTH = 4
 DEVICE = torch.device(f"cuda:{args.gpu}" if torch.cuda.is_available() else "cpu")
 ITERATIONS = 2000
-LR = 5e-2
+LR = 1e-2
 
 if not Path("spectracles/reconstructions").exists():
     Path("spectracles/reconstructions").mkdir(exist_ok=True, parents=True)
 
 
 class Reconstructor(nn.Module):
-    def __init__(self, width, depth, pe_dim):
+    def __init__(self, depth, pe_dim):
         super().__init__()
-        layer_dims = [pe_dim] + [width] * (depth - 1) + [3]
+        layer_dims = [pe_dim] * depth + [3]
         self.mlp = ComplexMLP(layer_dims)
         # self.gamma = nn.Parameter(torch.tensor(0.0))
 
@@ -66,7 +66,7 @@ pos_enc = get_binary_tree_rotary_position_vectors(
     device=DEVICE,
 )
 
-reconstructor = Reconstructor(WIDTH, DEPTH, PE_FREQS * 2).to(DEVICE)
+reconstructor = Reconstructor(DEPTH, PE_FREQS * 2).to(DEVICE)
 optimizer = torch.optim.Adam(reconstructor.parameters(), lr=LR)
 
 num_params = 0

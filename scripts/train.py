@@ -20,10 +20,10 @@ from ..src.spectracles import Spectracles
 model_args = dict(
     blocks=4,
     width=24,
-    pe_dim=14,
+    pe_dim=24,
     main_mlp_depth=2,
-    implicit_mlp_depth=4,
-    dropout=0.2,
+    implicit_mlp_depth=2,
+    dropout=0.5,
 )
 
 config = dict(
