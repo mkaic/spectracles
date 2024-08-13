@@ -15,7 +15,7 @@ from icecream import ic
 
 ic.configureOutput(includeContext=True)
 
-from ..src.model import Spectracles
+from ..src.spectracles import Spectracles
 
 model_args = dict(
     blocks=4,

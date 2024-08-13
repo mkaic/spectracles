@@ -6,7 +6,7 @@ from torch.utils.data import DataLoader
 from torchvision.datasets import CIFAR100
 import matplotlib.pyplot as plt
 
-from ..src.model import Spectracles
+from ..src.spectracles import Spectracles
 
 with torch.no_grad():
 
