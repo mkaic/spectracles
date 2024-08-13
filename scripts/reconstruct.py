@@ -19,12 +19,12 @@ parser = ArgumentParser()
 parser.add_argument("-g", "--gpu", type=int, default=0)
 args = parser.parse_args()
 
-WIDTH = 32
+WIDTH = 24
 PE_FREQS = 12
 DEPTH = 6
 DEVICE = torch.device(f"cuda:{args.gpu}" if torch.cuda.is_available() else "cpu")
-ITERATIONS = 200
-LR = 3e-2
+ITERATIONS = 2000
+LR = 1e-2
 
 if not Path("spectracles/reconstructions").exists():
     Path("spectracles/reconstructions").mkdir(exist_ok=True, parents=True)
@@ -46,9 +46,10 @@ class Reconstructor(nn.Module):
         return x
 
 
-# image = Image.open("spectracles/branos.jpg").convert("RGB")
-# image = to_tensor(image)
-image = torch.randn(3, 32, 32)
+image = Image.open("spectracles/branos.jpg").convert("RGB")
+image = to_tensor(image)
+# image = torch.rand(3, 256, 256)
+write_jpeg((image * 255).to(torch.uint8), "spectracles/reconstructions/original.jpg")
 image = image.to(DEVICE)
 
 c, h, w = image.shape
@@ -103,13 +104,16 @@ for i in pbar:
         write_jpeg(output, f"spectracles/reconstructions/{i:04d}.jpg")
         write_jpeg(output, f"spectracles/reconstructions/latest.jpg")
 
-extrapolate_pos_enc = get_binary_tree_rotary_position_vectors(
-    shape=(h * 2, w * 2),
-    num_frequencies=PE_FREQS,
-    device=DEVICE,
-)
+# with torch.no_grad():
+#     reconstructor.eval()
+#     interpolate_pos_enc = get_binary_tree_rotary_position_vectors(
+#         shape=(h * 4, w * 4),
+#         num_frequencies=PE_FREQS + 2,
+#         device=DEVICE,
+#     )
+#     interpolate_pos_enc = interpolate_pos_enc[..., 4:]
 
-output = reconstructor(extrapolate_pos_enc)
-output = output * 255
-output = output.to("cpu", torch.uint8)
-write_jpeg(output, f"spectracles/reconstructions/extrapolated.jpg")
+#     output = reconstructor(interpolate_pos_enc)
+#     output = output * 255
+#     output = output.to("cpu", torch.uint8)
+#     write_jpeg(output, f"spectracles/reconstructions/extrapolated.jpg")
