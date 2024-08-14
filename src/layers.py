@@ -177,10 +177,11 @@ class ComplexMLP(nn.Module):
 
             self.layers.append(ComplexLinear(dim_in, dim_out))
 
+            if dropout:
+                self.layers.append(ComplexDropout(max_p=dropout))
+
             if i != len(widths) - 2:
                 self.layers.append(LeakyCardioid(0.01))
-                if dropout:
-                    self.layers.append(ComplexDropout(max_p=dropout))
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         for layer in self.layers:
