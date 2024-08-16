@@ -14,26 +14,30 @@ from tqdm import tqdm
 from pathlib import Path
 from argparse import ArgumentParser
 from pytorch_msssim import ms_ssim
+from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 parser = ArgumentParser()
 parser.add_argument("-g", "--gpu", type=int, default=0)
 args = parser.parse_args()
 
-# WIDTH = 48
+WIDTH = 24
 PE_FREQS = 12
-DEPTH = 4
+DEPTH = 8
 DEVICE = torch.device(f"cuda:{args.gpu}" if torch.cuda.is_available() else "cpu")
 ITERATIONS = 2000
 LR = 1e-2
+SAVE = False
 
-if not Path("spectracles/reconstructions").exists():
-    Path("spectracles/reconstructions").mkdir(exist_ok=True, parents=True)
+images_path = Path("spectracles/recon/images")
+images_path.mkdir(exist_ok=True, parents=True)
+weights_path = Path("spectracles/recon/weights")
+weights_path.mkdir(exist_ok=True, parents=True)
 
 
 class Reconstructor(nn.Module):
-    def __init__(self, depth, pe_dim):
+    def __init__(self, width, depth, pe_dim):
         super().__init__()
-        layer_dims = [pe_dim] * depth + [3]
+        layer_dims = [pe_dim] + [width] * (depth - 1) + [3]
         self.mlp = ComplexMLP(layer_dims)
         # self.gamma = nn.Parameter(torch.tensor(0.0))
 
@@ -41,7 +45,8 @@ class Reconstructor(nn.Module):
         x = self.mlp(pos_enc)
         x = torch.abs(x)
         # x = x * self.gamma
-        x = 1 - (1 / (1 + x))
+        x = torch.atan(torch.square(x)) * (2 / torch.pi)
+        # x = x / (1 + x)
         x = x.permute(2, 0, 1)
         return x
 
@@ -49,7 +54,7 @@ class Reconstructor(nn.Module):
 image = Image.open("spectracles/branos.jpg").convert("RGB")
 image = to_tensor(image)
 # image = torch.rand(3, 256, 256)
-write_jpeg((image * 255).to(torch.uint8), "spectracles/reconstructions/original.jpg")
+write_jpeg((image * 255).to(torch.uint8), "spectracles/recon/images/original.jpg")
 image = image.to(DEVICE)
 
 c, h, w = image.shape
@@ -66,8 +71,13 @@ pos_enc = get_binary_tree_rotary_position_vectors(
     device=DEVICE,
 )
 
-reconstructor = Reconstructor(DEPTH, PE_FREQS * 2).to(DEVICE)
-optimizer = torch.optim.Adam(reconstructor.parameters(), lr=LR)
+reconstructor = Reconstructor(WIDTH, DEPTH, PE_FREQS * 2).to(DEVICE)
+optimizer = torch.optim.AdamW(
+    reconstructor.parameters(),
+    lr=LR,
+    betas=(0.8, 0.99),
+)
+scheduler = ReduceLROnPlateau(optimizer, "min", factor=0.5, patience=100, verbose=True)
 
 num_params = 0
 for p in reconstructor.parameters():
@@ -93,16 +103,20 @@ for i in pbar:
     loss = mse + mae + ms_ssim_loss
     loss.backward()
     optimizer.step()
+    scheduler.step(loss)
 
     pbar.set_description(
         f"RMSE: {torch.sqrt(mse).item():.4f} | MAE: {mae.item():.4f} | SSIM: {-ms_ssim_loss.item():.4f}"
     )
 
-    if i % 100 == 0:
+    if i % 10 == 0:
         output = output * 255
         output = output.to("cpu", torch.uint8)
-        write_jpeg(output, f"spectracles/reconstructions/{i:04d}.jpg")
-        write_jpeg(output, f"spectracles/reconstructions/latest.jpg")
+        write_jpeg(output, f"spectracles/recon/images/{i:04d}.jpg")
+        write_jpeg(output, f"spectracles/recon/images/latest.jpg")
+
+if SAVE:
+    torch.save(reconstructor.state_dict(), f"spectracles/recon/weights/{i:04d}.pt")
 
 # with torch.no_grad():
 #     reconstructor.eval()

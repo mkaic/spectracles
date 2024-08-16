@@ -18,12 +18,12 @@ ic.configureOutput(includeContext=True)
 from ..src.spectracles import Spectracles
 
 model_args = dict(
-    blocks=16,
-    width=64,
-    pe_dim=64,
+    blocks=4,
+    width=128,
+    pe_dim=128,
     main_mlp_depth=2,
     implicit_mlp_depth=2,
-    dropout=0.5,
+    dropout=0.6,
 )
 
 config = dict(
@@ -58,7 +58,7 @@ else:
 
 
 EPOCHS = 1000
-SAVE = True
+SAVE = False
 
 print(model_args)
 
@@ -67,7 +67,7 @@ if not Path("spectracles/weights").exists():
 
 loss_function = nn.CrossEntropyLoss()
 
-model = Spectracles(num_classes=10, input_channels=3, **model_args)
+model = Spectracles(num_classes=100, input_channels=3, **model_args)
 # for p in model.parameters():
 #     p.register_hook(complex_grad_clip)
 
@@ -115,13 +115,13 @@ if not args.print_params:
         else tvt.ToTensor()
     )
 
-    train = CIFAR10(
+    train = CIFAR100(
         root="./spectracles/data",
         train=True,
         download=True,
         transform=transform,
     )
-    test = CIFAR10(
+    test = CIFAR100(
         root="./spectracles/data", train=False, download=True, transform=tvt.ToTensor()
     )
 

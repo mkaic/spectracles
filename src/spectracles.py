@@ -23,6 +23,7 @@ class Spectracles(nn.Module):
         implicit_mlp_depth,
         pe_dim=None,
         dropout=None,
+        autoencoder=False,
     ):
         super().__init__()
         self.input_channels = input_channels
@@ -31,6 +32,7 @@ class Spectracles(nn.Module):
         self.width = width
         self.pe_dim = pe_dim
         self.dropout = dropout
+        self.autoencoder = autoencoder
 
         self.proj_in = nn.Linear(input_channels, width, bias=False)
 
@@ -60,7 +62,11 @@ class Spectracles(nn.Module):
             )
 
         self.out_norm = MagNorm(width, power=1.0)
-        self.out_proj = ComplexLinear(width, num_classes, bias=True)
+
+        if self.autoencoder:
+            self.out_proj = ComplexLinear(width, 3, bias=True)
+        else:
+            self.out_proj = ComplexLinear(width, num_classes, bias=True)
 
         self.pos_enc = None
 
@@ -92,8 +98,13 @@ class Spectracles(nn.Module):
 
         # Average all pixels and make final prediction
         x = self.out_norm(x)
-        x = x.mean(dim=(1, 2))
-        x = self.out_proj(x)
-        x = torch.abs(x)
+
+        if self.autoencoder:
+            x = self.out_proj(x)
+            x = torch.movedim(x, -1, 1)
+        else:
+            x = x.mean(dim=(1, 2))
+            x = self.out_proj(x)
+            x = torch.abs(x)
 
         return x

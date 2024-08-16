@@ -3,7 +3,7 @@ weights
 test_images
 data
 wandb
-reconstructions
+recon
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
