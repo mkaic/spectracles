@@ -20,13 +20,13 @@ parser = ArgumentParser()
 parser.add_argument("-g", "--gpu", type=int, default=0)
 args = parser.parse_args()
 
-WIDTH = 24
-PE_FREQS = 12
+WIDTH = 48
+PE_FREQS = 16
 DEPTH = 8
 DEVICE = torch.device(f"cuda:{args.gpu}" if torch.cuda.is_available() else "cpu")
-ITERATIONS = 2000
-LR = 1e-2
-SAVE = False
+ITERATIONS = 1000
+LR = 0.01
+SAVE = True
 
 images_path = Path("spectracles/recon/images")
 images_path.mkdir(exist_ok=True, parents=True)
@@ -39,31 +39,21 @@ class Reconstructor(nn.Module):
         super().__init__()
         layer_dims = [pe_dim] + [width] * (depth - 1) + [3]
         self.mlp = ComplexMLP(layer_dims)
-        # self.gamma = nn.Parameter(torch.tensor(0.0))
 
     def forward(self, pos_enc) -> torch.Tensor:
         x = self.mlp(pos_enc)
         x = torch.abs(x)
-        # x = x * self.gamma
         x = torch.atan(torch.square(x)) * (2 / torch.pi)
-        # x = x / (1 + x)
         x = x.permute(2, 0, 1)
         return x
 
 
-image = Image.open("spectracles/branos.jpg").convert("RGB")
+image = Image.open("spectracles/jwst_cliffs.png").convert("RGB")
 image = to_tensor(image)
-# image = torch.rand(3, 256, 256)
 write_jpeg((image * 255).to(torch.uint8), "spectracles/recon/images/original.jpg")
 image = image.to(DEVICE)
 
 c, h, w = image.shape
-
-# pos_enc = get_rotary_position_vectors(
-#     shape=(h, w),
-#     num_frequencies=WIDTH // 2,
-#     device=DEVICE,
-# )
 
 pos_enc = get_binary_tree_rotary_position_vectors(
     shape=(h, w),
@@ -75,9 +65,7 @@ reconstructor = Reconstructor(WIDTH, DEPTH, PE_FREQS * 2).to(DEVICE)
 optimizer = torch.optim.AdamW(
     reconstructor.parameters(),
     lr=LR,
-    betas=(0.8, 0.99),
 )
-scheduler = ReduceLROnPlateau(optimizer, "min", factor=0.5, patience=100, verbose=True)
 
 num_params = 0
 for p in reconstructor.parameters():
@@ -103,7 +91,6 @@ for i in pbar:
     loss = mse + mae + ms_ssim_loss
     loss.backward()
     optimizer.step()
-    scheduler.step(loss)
 
     pbar.set_description(
         f"RMSE: {torch.sqrt(mse).item():.4f} | MAE: {mae.item():.4f} | SSIM: {-ms_ssim_loss.item():.4f}"
@@ -117,17 +104,3 @@ for i in pbar:
 
 if SAVE:
     torch.save(reconstructor.state_dict(), f"spectracles/recon/weights/{i:04d}.pt")
-
-# with torch.no_grad():
-#     reconstructor.eval()
-#     interpolate_pos_enc = get_binary_tree_rotary_position_vectors(
-#         shape=(h * 4, w * 4),
-#         num_frequencies=PE_FREQS + 2,
-#         device=DEVICE,
-#     )
-#     interpolate_pos_enc = interpolate_pos_enc[..., 4:]
-
-#     output = reconstructor(interpolate_pos_enc)
-#     output = output * 255
-#     output = output.to("cpu", torch.uint8)
-#     write_jpeg(output, f"spectracles/reconstructions/extrapolated.jpg")
