@@ -5,6 +5,8 @@ from ..src.layers import (
     ComplexMLP,
     get_rotary_position_vectors,
     get_binary_tree_rotary_position_vectors,
+    LeakyCardioid,
+    ComplexLinear,
 )
 
 from PIL import Image
@@ -20,11 +22,11 @@ parser = ArgumentParser()
 parser.add_argument("-g", "--gpu", type=int, default=0)
 args = parser.parse_args()
 
-WIDTH = 48
-PE_FREQS = 16
+WIDTH = 32
+PE_FREQS = 12
 DEPTH = 8
 DEVICE = torch.device(f"cuda:{args.gpu}" if torch.cuda.is_available() else "cpu")
-ITERATIONS = 1000
+ITERATIONS = 2000
 LR = 0.01
 SAVE = True
 
@@ -38,10 +40,14 @@ class Reconstructor(nn.Module):
     def __init__(self, width, depth, pe_dim):
         super().__init__()
         layer_dims = [pe_dim] + [width] * (depth - 1) + [3]
-        self.mlp = ComplexMLP(layer_dims)
+        self.mlp_a = ComplexMLP(layer_dims)
+        # self.mlp_b = ComplexMLP(layer_dims)
+        # self.mlp_c = ComplexMLP(layer_dims)
+        # self.act = LeakyCardioid(0.01)
+        # self.out_proj = ComplexLinear(width, 3)
 
     def forward(self, pos_enc) -> torch.Tensor:
-        x = self.mlp(pos_enc)
+        x = self.mlp_a(pos_enc) # * self.mlp_b(pos_enc) # + self.mlp_c(pos_enc)
         x = torch.abs(x)
         x = torch.atan(torch.square(x)) * (2 / torch.pi)
         x = x.permute(2, 0, 1)
