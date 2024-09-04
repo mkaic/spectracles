@@ -47,7 +47,7 @@ class Reconstructor(nn.Module):
         # self.out_proj = ComplexLinear(width, 3)
 
     def forward(self, pos_enc) -> torch.Tensor:
-        x = self.mlp_a(pos_enc) # * self.mlp_b(pos_enc) # + self.mlp_c(pos_enc)
+        x = self.mlp_a(pos_enc)  # * self.mlp_b(pos_enc) # + self.mlp_c(pos_enc)
         x = torch.abs(x)
         x = torch.atan(torch.square(x)) * (2 / torch.pi)
         x = x.permute(2, 0, 1)

@@ -145,7 +145,7 @@ class ComplexDropout(nn.Module):
         return x
 
 
-def recenter_normalize(x: torch.Tensor) -> torch.Tensor:
+def per_channel_recenter_normalize(x: torch.Tensor) -> torch.Tensor:
     x = x - torch.mean(x, dim=(1, 2), keepdim=True)
     x = x / (torch.mean(torch.abs(x), dim=(1, 2), keepdim=True) + 1e-6)
     return x
@@ -191,42 +191,48 @@ class ComplexMLP(nn.Module):
 
 class FourierBlock(nn.Module):
     def __init__(
-        self, width, pe_dim, main_depth, implicit_depth, inverse=False, dropout=None
+        self, width, pe_dim, main_depth, implicit_depth, dropout=None, first=False
     ):
         super().__init__()
 
         self.magnorm_in = MagNorm(width, power=1.0)
         self.magnorm_out = MagNorm(width, power=1.0)
 
-        self.mlp = ComplexMLP([width] * (main_depth + 1), dropout=dropout)
+        self.mlp = ComplexMLP(
+            [width + pe_dim] * (main_depth) + [width], dropout=dropout
+        )
 
         self.implicit_filters_out = ComplexMLP(
             [pe_dim] * implicit_depth + [width], dropout=None
         )
-        self.inverse = inverse
+        self.out_linear = ComplexLinear(width * 2, width)
+
+        self.first = first
 
     def forward(self, x: torch.Tensor, pos_enc: torch.Tensor) -> torch.Tensor:
 
-        if self.inverse:
-            x = torch.fft.ifftn(x, dim=(1, 2), norm="ortho")
-        else:
-            x = torch.fft.fftn(x, dim=(1, 2), norm="ortho")
+        b, h, w, c = x.shape
+        x_original = x
 
-        x = recenter_normalize(x)
+        if not self.first:
+            x[..., : c // 2] = torch.fft.ifftn(
+                x[..., : c // 2], dim=(1, 2), norm="ortho"
+            )
+            x[..., c // 2 :] = torch.fft.fftn(
+                x[..., c // 2 :], dim=(1, 2), norm="ortho"
+            )
 
+        x = per_channel_recenter_normalize(x)
         x = self.magnorm_in(x)
 
+        x = torch.cat([x, pos_enc.expand(b, -1, -1, -1)], dim=-1)
         x = self.mlp(x)
 
         x = self.implicit_filters_out(pos_enc) * x
 
         x = self.magnorm_out(x)
 
+        x = torch.cat([x, x_original], dim=-1)
+        x = self.out_linear(x)
+
         return x
-
-
-def complex_grad_clip(grad):
-    if grad is not None:
-        mag = torch.abs(grad) + 1e-6
-        grad = torch.where(mag > 1, grad / mag, grad)
-    return grad

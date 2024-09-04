@@ -5,8 +5,7 @@ from pathlib import Path
 import torch
 import torch.nn as nn
 import torchvision.transforms as tvt
-from torch.optim import AdamW, SGD
-from torch.optim.lr_scheduler import StepLR
+from torch.optim import AdamW
 from torch.utils.data import DataLoader
 from torchvision.datasets import CIFAR100, CIFAR10
 from tqdm import tqdm
@@ -19,11 +18,11 @@ from ..src.spectracles import Spectracles
 
 model_args = dict(
     blocks=4,
-    width=128,
-    pe_dim=128,
+    width=24,
+    pe_dim=24,
     main_mlp_depth=2,
     implicit_mlp_depth=2,
-    dropout=0.6,
+    dropout=0.2,
 )
 
 config = dict(

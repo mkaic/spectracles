@@ -34,39 +34,23 @@ class Spectracles(nn.Module):
         self.dropout = dropout
         self.autoencoder = autoencoder
 
-        self.proj_in = nn.Linear(input_channels, width, bias=False)
+        self.proj_in = ComplexLinear(input_channels, width, bias=True)
 
-        self.freq_layers = nn.ModuleList()
-        self.pixel_layers = nn.ModuleList()
+        self.layers = nn.ModuleList()
 
         for i in range(self.num_layers):
-            self.freq_layers.append(
+            self.layers.append(
                 FourierBlock(
                     width,
                     pe_dim,
                     main_depth=main_mlp_depth,
                     implicit_depth=implicit_mlp_depth,
-                    inverse=False,
                     dropout=dropout,
                 )
             )
-            self.pixel_layers.append(
-                FourierBlock(
-                    width,
-                    pe_dim,
-                    main_depth=main_mlp_depth,
-                    implicit_depth=implicit_mlp_depth,
-                    inverse=True,
-                    dropout=dropout,
-                ),
-            )
 
         self.out_norm = MagNorm(width, power=1.0)
-
-        if self.autoencoder:
-            self.out_proj = ComplexLinear(width, 3, bias=True)
-        else:
-            self.out_proj = ComplexLinear(width, num_classes, bias=True)
+        self.out_proj = ComplexLinear(width, num_classes, bias=True)
 
         self.pos_enc = None
 
@@ -75,10 +59,13 @@ class Spectracles(nn.Module):
         x: torch.Tensor,
     ) -> torch.Tensor:
 
-        b, c, h, w = x.shape
-
         x = torch.movedim(x, 1, -1)  # B, C, H, W -> B, H, W, C
+        x = torch.complex(x, torch.zeros_like(x))
+
         x = self.proj_in(x)  # increase channel count
+        _, _, _, c = x.shape
+
+        x[..., c // 2 :] = torch.fft.fftn(x[..., c // 2 :], dim=(1, 2), norm="ortho")
 
         if self.pos_enc is None:
             self.pos_enc = get_rotary_position_vectors(
@@ -91,20 +78,13 @@ class Spectracles(nn.Module):
 
         for i in range(self.num_layers):
 
-            residual = x
-            x = self.freq_layers[i](x, self.pos_enc)
-            x = self.pixel_layers[i](x, self.pos_enc)
-            x = x + residual
+            x = self.layers[i](x, self.pos_enc)
 
         # Average all pixels and make final prediction
         x = self.out_norm(x)
 
-        if self.autoencoder:
-            x = self.out_proj(x)
-            x = torch.movedim(x, -1, 1)
-        else:
-            x = x.mean(dim=(1, 2))
-            x = self.out_proj(x)
-            x = torch.abs(x)
+        x = x.mean(dim=(1, 2))
+        x = self.out_proj(x)
+        x = torch.abs(x)
 
         return x
